@@ -101,14 +101,7 @@ const GridView = ({ videos, currentPage, totalPages, loadingMore, onPageChange, 
 
   return (
     <div className="pt-20 sm:pt-24 px-4 pb-8 relative min-h-screen">
-      {/* Loading state overlay */}
-      {loadingMore && (
-        <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="w-12 h-12 border-4 border-white/20 border-t-white rounded-full animate-spin"></div>
-        </div>
-      )}
-
-      <div className={`max-w-7xl mx-auto transition-opacity duration-300 ${loadingMore ? 'opacity-30 blur-sm' : 'opacity-100'}`}>
+      <div className="max-w-7xl mx-auto">
         {/* Grid of videos */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
           {videos.map((video, index) => (
@@ -129,8 +122,6 @@ const GridView = ({ videos, currentPage, totalPages, loadingMore, onPageChange, 
                   isPlaying[index] ? 'opacity-0' : 'opacity-100'
                 )}
                 priority={index < 8} // Prioritize loading first 8 thumbnails
-                placeholder="blur"
-                blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
                 onError={(e) => {
                   // Prevent multiple error events for the same thumbnail
                   if (failedThumbnails.has(video.thumbnailUrl)) {
@@ -256,7 +247,7 @@ const GridView = ({ videos, currentPage, totalPages, loadingMore, onPageChange, 
               <Button
                 variant="outline"
                 size="sm"
-                disabled={currentPage === 1 || loadingMore}
+                disabled={currentPage === 1 }
                 onClick={() => onPageChange(1)}
                 className="hidden sm:inline-flex bg-black/50 border-white/20 text-white hover:bg-black/70 disabled:opacity-50"
               >
@@ -267,7 +258,7 @@ const GridView = ({ videos, currentPage, totalPages, loadingMore, onPageChange, 
               <Button
                 variant="outline"
                 size="sm"
-                disabled={currentPage === 1 || loadingMore}
+                disabled={currentPage === 1 }
                 onClick={() => onPageChange(currentPage - 1)}
                 className="bg-black/50 border-white/20 text-white hover:bg-black/70 disabled:opacity-50"
               >
@@ -345,7 +336,7 @@ const GridView = ({ videos, currentPage, totalPages, loadingMore, onPageChange, 
               <Button
                 variant="outline"
                 size="sm"
-                disabled={currentPage === totalPages || loadingMore}
+                disabled={currentPage === totalPages }
                 onClick={() => onPageChange(currentPage + 1)}
                 className="bg-black/50 border-white/20 text-white hover:bg-black/70 disabled:opacity-50"
               >
@@ -357,7 +348,7 @@ const GridView = ({ videos, currentPage, totalPages, loadingMore, onPageChange, 
               <Button
                 variant="outline"
                 size="sm"
-                disabled={currentPage === totalPages || loadingMore}
+                disabled={currentPage === totalPages }
                 onClick={() => onPageChange(totalPages)}
                 className="hidden sm:inline-flex bg-black/50 border-white/20 text-white hover:bg-black/70 disabled:opacity-50"
               >

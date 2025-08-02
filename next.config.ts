@@ -39,6 +39,24 @@ const nextConfig: NextConfig = {
         hostname: 'i.ytimg.com',
         port: '',
         pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'tempfile.aiquickdraw.com',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'd2p7pge43lyniu.cloudfront.net',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'd1q70pf5vjeyhc.cloudfront.net',
+        port: '',
+        pathname: '/**',
       }
     ],
   },

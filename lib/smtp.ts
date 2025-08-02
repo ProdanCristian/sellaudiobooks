@@ -37,8 +37,8 @@ export const sendEmail = async (options: EmailOptions) => {
 
     const mailOptions = {
       from: {
-        name: process.env.SMTP_FROM_NAME || 'Vidsreels',
-        address: process.env.SMTP_FROM_EMAIL || 'info@vidsreels.com'
+        name: process.env.SMTP_FROM_NAME || 'FacelessCut',
+        address: process.env.SMTP_FROM_EMAIL || 'hello@facelesscut.com'
       },
       replyTo: process.env.SMTP_FROM_EMAIL,
       to: Array.isArray(options.to) ? options.to.join(', ') : options.to,
@@ -47,7 +47,7 @@ export const sendEmail = async (options: EmailOptions) => {
       text: options.text,
       attachments: options.attachments,
       headers: {
-        'X-Mailer': 'Vidsreels',
+        'X-Mailer': 'FacelessCut',
         'X-Priority': '3',
       }
     };
