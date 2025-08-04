@@ -185,89 +185,23 @@ export function VoiceGenerator({ scripts, onVoiceGenerated }: VoiceGeneratorProp
           {/* Script Selection */}
           {scripts.length > 1 && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Label className="font-medium">Select Script</Label>
-                <div className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-lg">
-                  {scripts.length} scripts available
-                </div>
-              </div>
+              <Label className="font-medium">Select Script</Label>
               
-              {/* Script Cards */}
-              <div className="grid gap-3">
-                {scripts.map((script, index) => {
-                  const wordCount = script.trim().split(/\s+/).length;
-                  const readingTime = Math.ceil(wordCount / 150);
-                  const isSelected = selectedScript === index;
-                  
-                  return (
-                    <div
-                      key={index}
-                      onClick={() => setSelectedScript(index)}
-                      className={`relative p-4 rounded-xl border cursor-pointer transition-all duration-200 hover:scale-[1.02] ${
-                        isSelected
-                          ? 'bg-muted border-primary shadow-lg'
-                          : 'bg-background hover:bg-muted'
-                      }`}
-                    >
-                      {/* Selected Indicator */}
-                      {isSelected && (
-                        <div className="absolute top-3 right-3 w-6 h-6 bg-primary rounded-full flex items-center justify-center">
-                          <div className="w-2 h-2 bg-primary-foreground rounded-full"></div>
-                        </div>
-                      )}
-                      
-                      {/* Script Header */}
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-sm font-bold transition-all duration-200 ${
-                          isSelected 
-                            ? 'bg-primary text-primary-foreground shadow-lg'
-                            : 'bg-muted text-foreground'
-                        }`}>
-                          {index + 1}
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <h3 className={`font-semibold ${isSelected ? 'text-primary' : 'text-foreground'}`}>
-                              Script {index + 1}
-                            </h3>
-                            {isSelected && (
-                              <div className="flex items-center gap-1 text-xs text-primary">
-                                <div className="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
-                                Selected
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
-                            <span className="flex items-center gap-1">
-                              <span>📝</span>
-                              {wordCount} words
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <span>⏱️</span>
-                              ~{readingTime} min
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <span>🔢</span>
-                              {script.length} chars
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Script Preview */}
-                      <div className={`text-sm leading-relaxed max-h-20 overflow-hidden ${
-                        isSelected ? 'text-foreground' : 'text-muted-foreground'
-                      }`}>
-                        {script.length > 200 ? `${script.substring(0, 200)}...` : script}
-                      </div>
-                      
-                      {/* Hover Indicator */}
-                      {!isSelected && (
-                        <div className="absolute inset-0 bg-muted/50 rounded-xl opacity-0 hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
-                      )}
-                    </div>
-                  );
-                })}
+              {/* Simple Script Buttons */}
+              <div className="grid grid-cols-3 gap-2">
+                {scripts.map((script, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setSelectedScript(index)}
+                    className={`p-3 rounded-lg border text-sm font-medium transition-all duration-200 ${
+                      selectedScript === index
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background hover:bg-muted border-border'
+                    }`}
+                  >
+                    Script {index + 1}
+                  </button>
+                ))}
               </div>
             </div>
           )}
@@ -524,30 +458,7 @@ export function VoiceGenerator({ scripts, onVoiceGenerated }: VoiceGeneratorProp
                 ))}
               </div>
 
-              {/* Fine-tune Slider */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Fine-tune:</span>
-                  <span>{voiceSpeed.toFixed(2)}x</span>
-                </div>
-                <input
-                  type="range"
-                  min="0.25"
-                  max="2.0"
-                  step="0.05"
-                  value={voiceSpeed}
-                  onChange={(e) => setVoiceSpeed(parseFloat(e.target.value))}
-                  className="w-full h-2 bg-black/50 rounded-lg appearance-none cursor-pointer"
-                  style={{
-                    background: `linear-gradient(to right, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.3) ${((voiceSpeed - 0.25) / (2.0 - 0.25)) * 100}%, rgba(0,0,0,0.3) ${((voiceSpeed - 0.25) / (2.0 - 0.25)) * 100}%, rgba(0,0,0,0.3) 100%)`
-                  }}
-                />
-                <div className="flex justify-between text-[10px] text-muted-foreground">
-                  <span>0.25x</span>
-                  <span>1.0x</span>
-                  <span>2.0x</span>
-                </div>
-              </div>
+
             </div>
           </div>
 
@@ -578,28 +489,7 @@ export function VoiceGenerator({ scripts, onVoiceGenerated }: VoiceGeneratorProp
                     </button>
                   ))}
                 </div>
-                
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>More predictable</span>
-                    <span className="font-medium">{temperature.toFixed(2)}</span>
-                    <span>More creative</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0.1"
-                    max="1.0"
-                    step="0.05"
-                    value={temperature}
-                    onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                    className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer"
-                  />
-                  <div className="flex justify-between text-[10px] text-muted-foreground">
-                    <span>0.1</span>
-                    <span>0.5</span>
-                    <span>1.0</span>
-                  </div>
-                </div>
+
               </div>
             </div>
 
@@ -628,28 +518,7 @@ export function VoiceGenerator({ scripts, onVoiceGenerated }: VoiceGeneratorProp
                     </button>
                   ))}
                 </div>
-                
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Focused</span>
-                    <span className="font-medium">{topP.toFixed(2)}</span>
-                    <span>Diverse</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0.1"
-                    max="1.0"
-                    step="0.05"
-                    value={topP}
-                    onChange={(e) => setTopP(parseFloat(e.target.value))}
-                    className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer"
-                  />
-                  <div className="flex justify-between text-[10px] text-muted-foreground">
-                    <span>0.1</span>
-                    <span>0.5</span>
-                    <span>1.0</span>
-                  </div>
-                </div>
+
               </div>
             </div>
           </div>
