@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Michroma } from "next/font/google";
 import "./globals.css";
 import Providers from "@/components/providers/session-provider";
 import { Toaster } from "@/components/ui/sonner"
@@ -14,9 +14,16 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const michroma = Michroma({
+  weight: "400",
+  variable: "--font-michroma",
+  subsets: ["latin"],
+});
+
+
 export const metadata: Metadata = {
-  title: "VidsReels",
-  description: "Create and share amazing video reels",
+  title: "FacelessCut",
+  description: "Create and share amazing faceless videos",
   icons: {
     icon: [
       { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
@@ -49,9 +56,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${michroma.variable} antialiased`}
       >
         <Providers>
           {children}

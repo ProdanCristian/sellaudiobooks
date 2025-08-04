@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import Logo from "@/components/logo"
+import { ThemeToggleSwitch } from "@/components/theme-toggle-switch"
 import { LogOut, User } from "lucide-react"
 import { signOut, useSession } from "next-auth/react"
 import Image from "next/image"
@@ -74,6 +75,11 @@ export default function DashboardHeader() {
                 <User className="mr-2 h-4 w-4" />
                 <span>Dashboard</span>
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <div className="px-2 py-1">
+                <ThemeToggleSwitch />
+              </div>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleSignOut}>
                 <LogOut className="mr-2 h-4 w-4" />
                 <span>Log out</span>

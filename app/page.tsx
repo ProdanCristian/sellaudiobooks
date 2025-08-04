@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { LogIn } from "lucide-react"
 import Link from "next/link"
 import Logo from "@/components/logo"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export default function Home() {
   const { status } = useSession()
@@ -31,6 +32,7 @@ export default function Home() {
           <div className="flex justify-between items-center py-4">
             <Logo />
             <div className="flex items-center space-x-4">
+              <ThemeToggle />
               <div className="space-x-2">
                 <Button variant="outline" asChild>
                   <Link href="/auth/login" className="flex items-center">
