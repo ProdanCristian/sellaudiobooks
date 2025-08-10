@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-FacelessCut is a Next.js 15 application for creating AI-powered faceless videos with voiceovers. The app supports both long-form (YouTube) and short-form (TikTok, Instagram Reels) video generation.
+GenViu is a Next.js 15 application for creating AI-powered faceless videos with voiceovers. The app supports both long-form (YouTube) and short-form (TikTok, Instagram Reels) video generation.
 
 ## Development Commands
 

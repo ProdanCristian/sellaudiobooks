@@ -13,7 +13,14 @@
       "Bash(npx shadcn@latest add:*)",
       "Bash(mkdir:*)",
       "Bash(grep:*)",
-      "WebFetch(domain:wavespeed.ai)"
+      "WebFetch(domain:wavespeed.ai)",
+      "WebFetch(domain:designcombo.dev)",
+      "WebFetch(domain:docs.fish.audio)",
+      "Bash(npx playwright install:*)",
+      "mcp__executeautomation-playwright-mcp-server__playwright_navigate",
+      "mcp__executeautomation-playwright-mcp-server__playwright_close",
+      "Bash(pkill:*)",
+      "Bash(npx prisma migrate dev:*)"
     ],
     "deny": []
   }

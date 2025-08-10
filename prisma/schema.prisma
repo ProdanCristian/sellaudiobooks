@@ -44,7 +44,6 @@ model User {
   updatedAt     DateTime  @updatedAt
   accounts      Account[]
   sessions      Session[]
-  scripts       Script[]  // Relation to saved scripts
 }
 
 model VerificationToken {
@@ -53,51 +52,4 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
-}
-
-model LuxuryVideos {
-  id           String @id @default(cuid())
-  s3Key        String @unique
-  thumbnailUrl String
-  videoUrl     String
-  videoLength  Int?       // Video length in seconds
-
-  // AI-powered content analysis
-  tags           String[]   // Keywords and tags (e.g., "yacht", "sunset", "travel")
-  categories     String[]   // Broader categories (e.g., "Luxury Travel", "Real Estate")
-  objects        String[]   // Specific objects detected (e.g., "Ferrari", "Rolex watch")
-  setting        String[]   // Scene setting (e.g., "beach", "cityscape", "mountains")
-  mood           String[]   // Vibe or mood (e.g., "inspirational", "relaxing", "energetic")
-  dominantColors String[]   // Dominant colors in hex format (e.g., "#FFD700")
-
-  // AI analysis metadata
-  isAnalyzed     Boolean  @default(false)
-  analyzedAt     DateTime?
-
-  // Metadata
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @default(now()) @updatedAt
-
-  @@index([s3Key])
-  @@index([isAnalyzed])
-  @@index([tags])
-  @@index([categories])
-}
-
-model Script {
-  id          String   @id @default(cuid())
-  content     String   // The actual script content
-  topic       String   // The luxury topic (motivational, success-mindset, etc.)
-  duration    Int      // Duration in seconds (15, 30, 60)
-  isGenerated Boolean  @default(false) 
-  
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  @@index([userId])
-  @@index([topic])
-  @@index([duration])
 }

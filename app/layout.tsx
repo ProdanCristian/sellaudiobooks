@@ -21,9 +21,10 @@ const michroma = Michroma({
 });
 
 
+
 export const metadata: Metadata = {
-  title: "FacelessCut",
-  description: "Create and share amazing faceless videos",
+  title: "SellAudioBooks",
+  description: "Create and sell audio books with AI",
   icons: {
     icon: [
       { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
@@ -41,7 +42,7 @@ export const metadata: Metadata = {
         type: "image/png",
       },
       {
-        rel: "icon", 
+        rel: "icon",
         url: "/android-chrome-512x512.png",
         sizes: "512x512",
         type: "image/png",
@@ -56,12 +57,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} ${michroma.variable} antialiased`}
-      >
+    <html lang="en" className="dark" suppressHydrationWarning>
+      <body className={`${geistSans.variable} ${geistMono.variable} ${michroma.variable} antialiased`}>
         <Providers>
-          {children}
+          <div className="min-h-screen bg-gradient-to-br from-background via-primary/10 to-muted/30 dark:from-zinc-950 dark:via-primary/20 dark:to-zinc-900">
+            {children}
+          </div>
           <Toaster position="bottom-center" />
         </Providers>
       </body>

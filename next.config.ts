@@ -57,6 +57,12 @@ const nextConfig: NextConfig = {
         hostname: 'd1q70pf5vjeyhc.cloudfront.net',
         port: '',
         pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'public-platform.r2.fish.audio',
+        port: '',
+        pathname: '/**',
       }
     ],
   },

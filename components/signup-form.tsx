@@ -18,6 +18,7 @@ export function SignupForm({
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
+  const [isFacebookLoading, setIsFacebookLoading] = useState(false)
   const [error, setError] = useState("")
   const router = useRouter()
 
@@ -71,7 +72,7 @@ export function SignupForm({
   const handleGoogleSignUp = async () => {
     setIsGoogleLoading(true)
     setError("")
-    
+
     try {
       await signIn("google", {
         callbackUrl: "/dashboard"
@@ -82,24 +83,38 @@ export function SignupForm({
     }
   }
 
-  const isAnyLoading = isLoading || isGoogleLoading
+  const handleFacebookSignUp = async () => {
+    setIsFacebookLoading(true)
+    setError("")
+
+    try {
+      await signIn("facebook", {
+        callbackUrl: "/dashboard"
+      })
+    } catch {
+      setError("Facebook sign up failed. Please try again.")
+      setIsFacebookLoading(false)
+    }
+  }
+
+  const isAnyLoading = isLoading || isGoogleLoading || isFacebookLoading
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card className="overflow-hidden p-0 w-full max-w-[400px] mx-auto">
+      <Card className="overflow-hidden p-0 w-full max-w-[400px] mx-auto bg-transparent">
         <CardContent className="grid p-0 w-full">
           <form className="p-6 md:p-8" onSubmit={handleSubmit}>
             <div className="flex flex-col gap-6">
               <div className="flex flex-col items-center text-center">
                 <h1 className="text-2xl font-bold">Create an account</h1>
                 <p className="text-muted-foreground text-balance">
-                  Join FacelessCut and start creating amazing content
+                  Join SellAudioBooks and start creating audio books
                 </p>
               </div>
               <div className="flex flex-col gap-4">
-                <Button 
-                  variant="outline" 
-                  type="button" 
+                <Button
+                  variant="outline"
+                  type="button"
                   className="w-full"
                   onClick={handleGoogleSignUp}
                   disabled={isAnyLoading}
@@ -111,6 +126,21 @@ export function SignupForm({
                     />
                   </svg>
                   {isGoogleLoading ? "Signing up..." : "Sign up with Google"}
+                </Button>
+                <Button
+                  variant="outline"
+                  type="button"
+                  className="w-full"
+                  onClick={handleFacebookSignUp}
+                  disabled={isAnyLoading}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="mr-2 h-4 w-4">
+                    <path
+                      d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"
+                      fill="currentColor"
+                    />
+                  </svg>
+                  {isFacebookLoading ? "Signing up..." : "Sign up with Facebook"}
                 </Button>
               </div>
               <div className="after:border-border relative text-center text-sm after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center after:border-t">
@@ -144,18 +174,18 @@ export function SignupForm({
               </div>
               <div className="grid gap-3">
                 <Label htmlFor="password">Password</Label>
-                <Input 
-                  id="password" 
-                  type="password" 
+                <Input
+                  id="password"
+                  type="password"
                   placeholder="Create a strong password (min 6 characters)"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  required 
+                  required
                   disabled={isAnyLoading}
                 />
               </div>
               {error && (
-                <div className="text-red-500 text-sm text-center">{error}</div>
+                <div className="text-destructive text-sm text-center">{error}</div>
               )}
               <Button type="submit" className="w-full" disabled={isAnyLoading}>
                 {isLoading ? "Creating account..." : "Create Account"}

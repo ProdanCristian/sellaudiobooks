@@ -1,4 +1,6 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# GenViu
+
+GenViu is a Next.js 15 application for creating AI-powered faceless videos with voiceovers. The app supports both long-form (YouTube) and short-form (TikTok, Instagram Reels) video generation.
 
 ## Getting Started
 
@@ -16,18 +18,41 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Features
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- AI-powered script generation using Gemini 2.5 Flash model
+- Support for both long-form and short-form video content
+- Pre-analyzed luxury video database with AI-extracted tags and metadata
+- Dark theme by default with modern UI components
+- Authentication with NextAuth.js (Google, Facebook, credentials)
+- PostgreSQL database with Prisma ORM
 
-## Learn More
+## Development Commands
 
-To learn more about Next.js, take a look at the following resources:
+**Development:**
+- `npm run dev` - Start development server with Turbopack
+- `npm run dev:network` - Start development server accessible on network
+- `npm run tunnel` - Start tunnel using ./scripts/start-tunnel.sh
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+**Build & Deploy:**
+- `npm run build` - Build for production
+- `npm start` - Start production server
+- `npm run lint` - Run ESLint
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+**Database:**
+- `npm run postinstall` - Generate Prisma client (runs automatically after install)
+- `npx prisma generate` - Generate Prisma client manually
+- `npx prisma migrate dev` - Run database migrations in development
+- `npx prisma studio` - Open Prisma Studio for database management
+
+## Tech Stack
+
+- **Framework:** Next.js 15 with App Router and Turbopack
+- **Database:** PostgreSQL with Prisma ORM
+- **Authentication:** NextAuth.js with Google, Facebook, and credentials providers
+- **AI Services:** AIML API (using OpenAI SDK) with Gemini 2.5 Flash model
+- **UI:** Tailwind CSS with Radix UI components, Shadcn UI
+- **Styling:** Dark theme by default, custom component system
 
 ## Deploy on Vercel
 

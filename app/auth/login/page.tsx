@@ -4,9 +4,8 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useEffect } from "react"
 import { LoginForm } from "@/components/login-form"
-
 import Logo from "@/components/logo"
-import { ThemeToggle } from "@/components/theme-toggle"
+
 
 export default function SignIn() {
   const { status } = useSession()
@@ -23,14 +22,10 @@ export default function SignIn() {
   }
 
   return (
-    <div className="bg-background flex min-h-svh flex-col items-center justify-center p-6 md:p-10 relative">
-      <div className="absolute top-4 right-4">
-        <ThemeToggle />
-      </div>
-      <div className="w-full max-w-sm md:max-w-3xl flex flex-col gap-4">
-        <Logo />
-        <LoginForm />
-      </div>
+    <div className="min-h-screen flex items-center justify-center flex-col gap-4">
+      <Logo />
+      <LoginForm />
     </div>
+
   )
 } 
