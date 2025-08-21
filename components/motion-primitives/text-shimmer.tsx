@@ -30,12 +30,7 @@ function TextShimmerComponent({
     <MotionComponent
       className={cn(
         'relative inline-block bg-[length:250%_100%,auto] bg-clip-text text-transparent',
-        // Light mode - red shimmer animation over dark text
-        '[--base-color:#000000] [--base-gradient-color:#ff0000]',
-        '[background-repeat:no-repeat,padding-box]',
-        '[--bg:linear-gradient(90deg,transparent_calc(50%-var(--spread)),var(--base-gradient-color),transparent_calc(50%+var(--spread)))]',
-        // Dark mode - red shimmer animation over white text
-        'dark:[--base-color:#ffffff] dark:[--base-gradient-color:#ff1a1a]',
+        'dark:[--base-color:#ffffff] dark:[--base-gradient-color:#242424]',
         'dark:[--bg:linear-gradient(90deg,transparent_calc(50%-var(--spread)),var(--base-gradient-color),transparent_calc(50%+var(--spread)))]',
         className
       )}

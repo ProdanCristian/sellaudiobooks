@@ -22,7 +22,7 @@ export default function SignIn() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center flex-col gap-4">
+    <div className="min-h-screen flex items-center justify-center flex-col gap-4 py-10">
       <Logo />
       <LoginForm />
     </div>

@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Michroma } from "next/font/google";
 import "./globals.css";
 import Providers from "@/components/providers/session-provider";
 import { Toaster } from "@/components/ui/sonner"
+import BackgroundGradients from "@/components/background-gradients"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,8 +20,6 @@ const michroma = Michroma({
   variable: "--font-michroma",
   subsets: ["latin"],
 });
-
-
 
 export const metadata: Metadata = {
   title: "SellAudioBooks",
@@ -57,10 +56,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} ${michroma.variable} antialiased`}>
+    <html lang="en" className="bg-primary/10" suppressHydrationWarning>
+      <body className={`${geistSans.variable} ${geistMono.variable} ${michroma.variable} antialiased`} suppressHydrationWarning>
         <Providers>
-          <div className="min-h-screen bg-gradient-to-br from-background via-primary/10 to-muted/30 dark:from-zinc-950 dark:via-primary/20 dark:to-zinc-900">
+          <BackgroundGradients />
+          <div className="min-h-screen relative z-10">
             {children}
           </div>
           <Toaster position="bottom-center" />

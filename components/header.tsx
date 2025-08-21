@@ -10,15 +10,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Avatar, } from "@/components/ui/avatar"
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
+import { Skeleton } from "@/components/ui/skeleton"
 import Logo from "@/components/logo"
-import { LogIn, LogOut, User } from "lucide-react"
+import { LogIn, LogOut, User, BookOpen } from "lucide-react"
 import { signOut, useSession } from "next-auth/react"
-import Image from "next/image"
 import { Button } from "./ui/button"
 
 export default function Header() {
-  const { data: session } = useSession()
+  const { data: session, status } = useSession()
   const router = useRouter()
 
   const handleSignOut = async () => {
@@ -31,10 +31,14 @@ export default function Header() {
     router.push("/dashboard")
   }
 
+  const navigateToBooks = () => {
+    router.push("/books")
+  }
+
   return (
-    <header className="fixed top-0 left-0 right-0 z-50  backdrop-blur-md border-b border-border">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16 sm:h-20">
+    <header className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md border-b border-border">
+      <div className="mx-auto">
+        <div className="container px-2 mx-auto flex justify-between items-center h-16 sm:h-20">
           {/* Logo */}
           <div
             className="flex items-center cursor-pointer"
@@ -44,21 +48,24 @@ export default function Header() {
           </div>
 
           {/* User Menu or Login Button */}
-          {session ? (
+          {status === 'loading' ? (
+            <Skeleton className="h-10 w-10 rounded-full bg-muted/30" />
+          ) : session ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Avatar className="h-10 w-10">
-                  {session?.user?.image && (
-                    <Image
-                      src={session.user.image}
-                      alt={session.user.name || session.user.email || "User"}
-                      width={40}
-                      height={40}
-                    />
-                  )}
+                <Avatar className="h-10 w-10 cursor-pointer">
+                  <AvatarImage
+                    src={session?.user?.image || ""}
+                    alt={session?.user?.name || session?.user?.email || "User"}
+                    referrerPolicy="no-referrer"
+                    crossOrigin="anonymous"
+                  />
+                  <AvatarFallback className="bg-primary/10 text-foreground">
+                    {session?.user?.name?.[0]?.toUpperCase() || session?.user?.email?.[0]?.toUpperCase() || "U"}
+                  </AvatarFallback>
                 </Avatar>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56" align="end" forceMount>
+              <DropdownMenuContent className="w-56 bg-transparent backdrop-blur-md p-2" align="end" forceMount>
                 <div className="flex flex-col space-y-1 p-2">
                   <p className="text-sm font-medium leading-none">
                     {session?.user?.name || "User"}
@@ -68,9 +75,13 @@ export default function Header() {
                   </p>
                 </div>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={navigateToDashboard}>
+                <DropdownMenuItem className="" onClick={navigateToDashboard}>
                   <User className="mr-2 h-4 w-4" />
                   <span>Dashboard</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="" onClick={navigateToBooks}>
+                  <BookOpen className="mr-2 h-4 w-4" />
+                  <span>Books</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleSignOut}>
@@ -81,14 +92,14 @@ export default function Header() {
             </DropdownMenu>
           ) : (
             <Button
-              variant="outline"
+              variant="default"
               size="sm"
               asChild
-              className="hidden sm:flex"
+              className="flex"
             >
               <Link href="/auth/login" className="flex items-center">
-                <LogIn className="w-4 h-4 mr-2" />
-                Login
+                <LogIn className="w-4 h-4" />
+                <p className="hidden md:block pl-1">Login</p>
               </Link>
             </Button>
           )}

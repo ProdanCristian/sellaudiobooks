@@ -8,8 +8,10 @@ export default function Providers({ children }: { children: React.ReactNode }) {
     <ThemeProvider
       attribute="class"
       defaultTheme="dark"
-      enableSystem={true}
+      enableSystem={false}
+      forcedTheme="dark"
       disableTransitionOnChange
+      suppressHydrationWarning
     >
       <SessionProvider>{children}</SessionProvider>
     </ThemeProvider>

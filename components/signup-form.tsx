@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { signIn } from "next-auth/react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -21,6 +21,40 @@ export function SignupForm({
   const [isFacebookLoading, setIsFacebookLoading] = useState(false)
   const [error, setError] = useState("")
   const router = useRouter()
+  const searchParams = useSearchParams()
+  
+  const bookTitle = searchParams.get('title')
+  const bookCover = searchParams.get('cover')
+
+  const createBookAfterSignup = async () => {
+    if (!bookTitle) return
+    
+    try {
+      // Add a small delay to ensure session is established
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
+      const response = await fetch('/api/books/create-from-signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: bookTitle,
+          coverImage: bookCover,
+        }),
+      })
+      
+      const result = await response.json()
+      
+      if (!response.ok) {
+        console.error('Error creating book after signup:', result)
+      } else {
+        console.log('Book created successfully:', result)
+      }
+    } catch (error) {
+      console.error('Error creating book after signup:', error)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -56,6 +90,8 @@ export function SignupForm({
         if (result?.error) {
           setError("Account created but login failed. Please try logging in manually.")
         } else {
+          // Create book if coming from book creation flow
+          await createBookAfterSignup()
           router.push("/dashboard")
         }
       } else {
@@ -74,8 +110,16 @@ export function SignupForm({
     setError("")
 
     try {
+      // Store book data in sessionStorage before OAuth redirect
+      if (bookTitle) {
+        sessionStorage.setItem('pendingBook', JSON.stringify({
+          title: bookTitle,
+          cover: bookCover
+        }))
+      }
+      
       await signIn("google", {
-        callbackUrl: "/dashboard"
+        callbackUrl: '/dashboard'
       })
     } catch {
       setError("Google sign up failed. Please try again.")
@@ -88,8 +132,16 @@ export function SignupForm({
     setError("")
 
     try {
+      // Store book data in sessionStorage before OAuth redirect
+      if (bookTitle) {
+        sessionStorage.setItem('pendingBook', JSON.stringify({
+          title: bookTitle,
+          cover: bookCover
+        }))
+      }
+      
       await signIn("facebook", {
-        callbackUrl: "/dashboard"
+        callbackUrl: '/dashboard'
       })
     } catch {
       setError("Facebook sign up failed. Please try again.")

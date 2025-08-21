@@ -1,0 +1,96 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { PrismaClient } from '@prisma/client'
+import { countWordsInHTML } from '@/lib/text-utils'
+import { shouldUpdateBookStatus } from '@/lib/book-status'
+
+const prisma = new PrismaClient()
+
+interface Params {
+  id: string
+}
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<Params> }
+) {
+  try {
+    const { id } = await params
+    const session = await getServerSession(authOptions)
+    
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email }
+    })
+
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    const book = await prisma.book.findFirst({
+      where: { 
+        id: id,
+        userId: user.id
+      },
+      include: {
+        chapters: {
+          orderBy: { order: 'desc' },
+          take: 1
+        }
+      }
+    })
+
+    if (!book) {
+      return NextResponse.json({ error: 'Book not found' }, { status: 404 })
+    }
+
+    const body = await request.json()
+    const { title, content } = body
+
+    if (!title?.trim()) {
+      return NextResponse.json({ error: 'Chapter title is required' }, { status: 400 })
+    }
+
+    const nextOrder = book.chapters.length > 0 ? book.chapters[0].order + 1 : 1
+    const wordCount = content ? countWordsInHTML(content) : 0
+
+    // Use transaction to create chapter and potentially update book status
+    const result = await prisma.$transaction(async (tx) => {
+      const chapter = await tx.chapter.create({
+        data: {
+          title: title.trim(),
+          content: content?.trim() || '',
+          order: nextOrder,
+          wordCount,
+          bookId: id,
+        }
+      })
+
+      // Check if we should update book status (when first chapter is created)
+      const newChapterCount = book.chapters.length + 1
+      const newStatus = shouldUpdateBookStatus({
+        introduction: book.introduction,
+        chaptersCount: newChapterCount
+      }, book.status)
+
+      if (newStatus) {
+        await tx.book.update({
+          where: { id: id },
+          data: { status: newStatus }
+        })
+        console.log(`📚 Auto-updating book status from ${book.status} to ${newStatus} (chapter created)`)
+      }
+
+      return chapter
+    })
+
+    return NextResponse.json(result, { status: 201 })
+  } catch (error) {
+    console.error('Error creating chapter:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}

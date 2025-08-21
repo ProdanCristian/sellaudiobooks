@@ -44,6 +44,7 @@ model User {
   updatedAt     DateTime  @updatedAt
   accounts      Account[]
   sessions      Session[]
+  books         Book[]
 }
 
 model VerificationToken {
@@ -52,4 +53,97 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+model Book {
+  id                 String      @id @default(cuid())
+  title              String
+  introduction       String?     @db.Text
+  conclusion         String?     @db.Text
+  customInstructions String?     @db.Text
+  genre              String?
+  targetAudience     String?
+  status             BookStatus  @default(DRAFT)
+  coverImage         String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  userId             String
+  user               User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chapters           Chapter[]
+  audioGenerations   AudioGeneration[]
+  audioJobs          AudioJob[]
+}
+
+model Chapter {
+  id        String   @id @default(cuid())
+  title     String
+  content   String   @db.Text
+  order     Int
+  wordCount Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  bookId    String
+  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  audioGenerations AudioGeneration[]
+  audioJobs AudioJob[]
+
+  @@unique([bookId, order])
+}
+
+model AudioGeneration {
+  id           String            @id @default(cuid())
+  audioUrl     String?
+  voiceId      String
+  voiceName    String
+  contentType  AudioContentType
+  textLength   Int
+  status       AudioJobStatus    @default(PENDING)
+  jobId        String?           @unique
+  errorMessage String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  bookId       String
+  book         Book              @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  chapterId    String?
+  chapter      Chapter?          @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@unique([bookId, chapterId, contentType])
+}
+
+model AudioJob {
+  id           String            @id @default(cuid())
+  jobId        String            @unique
+  status       AudioJobStatus    @default(PENDING)
+  audioUrl     String?
+  errorMessage String?
+  voiceId      String
+  voiceName    String
+  text         String            @db.Text
+  contentType  AudioContentType
+  bookId       String
+  chapterId    String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  book         Book              @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  chapter      Chapter?          @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+}
+
+enum BookStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+  PUBLISHED
+}
+
+enum AudioContentType {
+  INTRODUCTION
+  CHAPTER
+  FULL_BOOK
+}
+
+enum AudioJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
 }

@@ -20,7 +20,18 @@
       "mcp__executeautomation-playwright-mcp-server__playwright_navigate",
       "mcp__executeautomation-playwright-mcp-server__playwright_close",
       "Bash(pkill:*)",
-      "Bash(npx prisma migrate dev:*)"
+      "Bash(npx prisma migrate dev:*)",
+      "Bash(npx prisma studio:*)",
+      "Bash(npm run lint)",
+      "Bash(true)",
+      "Bash(npx prisma db execute:*)",
+      "WebFetch(domain:www.shadcn.io)",
+      "WebFetch(domain:ui.shadcn.com)",
+      "Bash(npm run tunnel:*)",
+      "Bash(npm run lint:*)",
+      "Bash(node:*)",
+      "Bash(npx prisma generate:*)",
+      "Bash(npx prisma:*)"
     ],
     "deny": []
   }
