@@ -20,6 +20,9 @@ interface WritingAssistantRequest {
     customInstructions?: string;
     currentContent?: string;
     fullIntroduction?: string;
+    fullConclusion?: string;
+    currentSection?: 'intro' | 'chapter' | 'conclusion';
+    currentSectionTitle?: string;
     chapters?: Array<{
       id: string;
       title: string;
@@ -55,6 +58,8 @@ async function getWritingAssistance(
 - Target Audience: ${bookContext.targetAudience || "Not specified"}
 - Writing Instructions: ${bookContext.customInstructions || "None provided"}
 - Current Content Length: ${bookContext.currentContent?.length || 0} characters
+- Current Section: ${bookContext.currentSection === 'intro' ? 'Introduction' : bookContext.currentSection === 'conclusion' ? 'Conclusion' : bookContext.currentSection === 'chapter' ? `Chapter (${bookContext.currentSectionTitle || 'Untitled'})` : 'Not specified'}
+- Working On: ${bookContext.currentSection === 'intro' ? 'Book Introduction' : bookContext.currentSection === 'conclusion' ? 'Book Conclusion' : bookContext.currentSection === 'chapter' ? `Chapter: "${bookContext.currentSectionTitle || 'Untitled Chapter'}"` : 'General book content'}
 
 **Existing Book Content:**
 
@@ -65,14 +70,17 @@ ${bookContext.fullIntroduction}
 ${bookContext.chapters.map(chapter => `
 **Chapter ${chapter.order}: ${chapter.title}**
 ${chapter.content || "(Empty chapter)"}
-`).join('\n')}` : "**Chapters:** No chapters created yet"}
+`).join('\n')}
+
+` : "**Chapters:** No chapters created yet\n\n"}${bookContext.fullConclusion ? `**Conclusion:**
+${bookContext.fullConclusion}` : "**Conclusion:** Not written yet"}
 
 **Guidelines:**
 - Be encouraging and supportive
 - Ask one clear question at a time when seeking clarification
 - Provide specific, actionable advice
-- When providing book content (text that the author should add to their book), ALWAYS format your response in HTML using <p> tags for paragraphs, <strong> for bold text, and <em> for italic text
-- Never use <br> tags for paragraph breaks - only use <p> tags for paragraphs
+- When providing book content (text that the author should add to their book), ALWAYS format your response in markdown using **bold** for emphasis, *italic* for emphasis, and proper paragraph breaks
+- Use markdown formatting for headings (# ## ###), lists, and other formatting
 - Offer concrete text suggestions when appropriate
 - Keep responses conversational and engaging
 - Focus on helping the author make progress
@@ -83,6 +91,24 @@ ${chapter.content || "(Empty chapter)"}
 - Use markdown formatting for better readability (headings, bold text, lists)
 - Be confident in your suggestions while remaining open to feedback
 - When providing written content, present it directly without meta-commentary about it being a draft
+
+**Section-Specific Context:**
+${bookContext.currentSection === 'intro' ? `
+- You are currently helping with the INTRODUCTION section
+- Focus on engaging openings, hooks, and setting up the book's main themes
+- Consider how to introduce the topic/story and establish connection with readers
+- Introduction should align with the book's genre and target audience` : 
+bookContext.currentSection === 'conclusion' ? `
+- You are currently helping with the CONCLUSION section
+- Focus on wrapping up key points, providing closure, and leaving lasting impact
+- Consider how to reinforce main themes and provide satisfying ending
+- Conclusion should tie back to introduction and deliver on book's promises` :
+bookContext.currentSection === 'chapter' ? `
+- You are currently helping with CHAPTER: "${bookContext.currentSectionTitle || 'Untitled Chapter'}"
+- Focus on developing content specific to this chapter's theme and purpose
+- Consider how this chapter fits within the overall book structure
+- Maintain consistency with previous chapters and book's progression` :
+'- You are helping with general book content'}
 
 ${enableWebSearch ? `**WEB SEARCH MODE ENABLED:**
 - You have access to current information from the internet

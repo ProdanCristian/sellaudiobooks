@@ -14,7 +14,7 @@ interface VoiceGeneratorProps {
   bookTitle: string
   bookId: string
   content: string
-  contentType: 'introduction' | 'chapter'
+  contentType: 'introduction' | 'chapter' | 'conclusion'
   chapterTitle?: string
   onAudioGenerated?: (audioUrl: string, metadata: Record<string, unknown>) => void
   onBack?: () => void
@@ -90,7 +90,7 @@ export default function VoiceGenerator({
         body: JSON.stringify({
           voiceId: selectedVoice._id,
           text: content,
-          chapterTitle: chapterTitle || 'Introduction',
+          chapterTitle: chapterTitle || (contentType === 'introduction' ? 'Introduction' : contentType === 'conclusion' ? 'Conclusion' : 'Chapter'),
           bookTitle: bookTitle
         })
       })
@@ -148,7 +148,7 @@ export default function VoiceGenerator({
           <div className="flex-1">
             <h2 className="text-xl font-semibold">Audio Generated Successfully!</h2>
             <p className="text-sm text-muted-foreground">
-              {contentType === 'introduction' ? 'Introduction' : chapterTitle} • {bookTitle}
+              {contentType === 'introduction' ? 'Introduction' : contentType === 'conclusion' ? 'Conclusion' : chapterTitle} • {bookTitle}
             </p>
           </div>
         </div>
@@ -210,7 +210,7 @@ export default function VoiceGenerator({
           <div>
             <h2 className="text-xl font-semibold">Generating Audio</h2>
             <p className="text-muted-foreground">
-              Creating audio for your {contentType === 'introduction' ? 'introduction' : 'chapter'} using {selectedVoice?.title}...
+              Creating audio for your {contentType === 'introduction' ? 'introduction' : contentType === 'conclusion' ? 'conclusion' : 'chapter'} using {selectedVoice?.title}...
             </p>
           </div>
         </div>
@@ -244,7 +244,7 @@ export default function VoiceGenerator({
         <div className="flex-1">
           <h2 className="text-xl font-semibold">Choose Your Voice</h2>
           <p className="text-sm text-muted-foreground">
-            Select from your personal AI voices for your {contentType === 'introduction' ? 'introduction' : 'chapter'}
+            Select from your personal AI voices for your {contentType === 'introduction' ? 'introduction' : contentType === 'conclusion' ? 'conclusion' : 'chapter'}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
             Don't have voices yet? <button 

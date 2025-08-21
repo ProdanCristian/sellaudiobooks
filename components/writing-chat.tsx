@@ -55,6 +55,7 @@ interface WritingChatProps {
     customInstructions?: string
     currentContent?: string
     fullIntroduction?: string
+    fullConclusion?: string
     chapters?: Array<{
       id: string
       title: string
@@ -315,7 +316,11 @@ export default function WritingChat({
         },
         body: JSON.stringify({
           message: userMessage.content,
-          bookContext,
+          bookContext: {
+            ...bookContext,
+            currentSection: mode,
+            currentSectionTitle: headerContext
+          },
           conversationHistory: messages.map(msg => ({
             role: msg.role,
             content: msg.content
@@ -559,9 +564,11 @@ export default function WritingChat({
       return `\n<ul>${items}</ul>`
     })
 
-    // Bold/Italic
+    // Bold (** or __)
     text = text.replace(/(\*\*|__)(.+?)\1/g, '<strong>$2</strong>')
-    text = text.replace(/(^|[^*_])(\*|_)([^*_].*?)\2/g, '$1<em>$3</em>')
+    
+    // Italic (* or _ but not ** or __)
+    text = text.replace(/(^|[^*_])(\*|_)([^*_\s](?:[^*_]*[^*_\s])?)\2(?![*_])/g, '$1<em>$3</em>')
 
     // Inline code
     text = text.replace(/`([^`]+)`/g, (_m, code) => `<code>${escapeHtml(code)}</code>`)
@@ -598,38 +605,40 @@ export default function WritingChat({
   const looksLikeMarkdown = (value: string): boolean => {
     if (!value) return false
     if (/<\w+[\s\S]*>/.test(value)) return false // already HTML
-    return /(^|\n)#{1,6}\s|\*\*|\*[^*].*\*|^[-*]\s|^\d+\.\s|^>\s|```|---/m.test(value)
+    // Check for common markdown patterns: headers, bold, italic, lists, blockquotes, code blocks, horizontal rules
+    return /(^|\n)#{1,6}\s|\*\*.*\*\*|\*[^*\s].*[^*\s]\*|^[-*]\s|^\d+\.\s|^>\s|```|---|__.*__|_[^_\s].*[^_\s]_/m.test(value)
   }
 
   const convertToHtmlParagraphs = (content: string): string => {
     console.log('Original content:', JSON.stringify(content))
 
-    // If content already has HTML tags, return as is (ChatGPT should now provide HTML)
+    // If content already has HTML tags, return as is
     if (/<\/?[a-z][\s\S]*>/i.test(content)) {
       console.log('Content already has HTML tags, returning as is')
       return content
     }
 
-    // Check if content looks like markdown and convert it (fallback)
-    if (looksLikeMarkdown(content)) {
-      console.log('Content appears to be markdown, converting to HTML')
-      const htmlContent = markdownToHtmlBasic(content)
-      console.log('Converted HTML:', htmlContent)
-      return htmlContent
+    // Always try to convert markdown to HTML first (since AI responses should be in markdown now)
+    console.log('Converting content as markdown to HTML')
+    const htmlContent = markdownToHtmlBasic(content)
+    console.log('Converted HTML:', htmlContent)
+    
+    // If the conversion didn't produce any HTML tags, fall back to paragraph splitting
+    if (!/<\/?[a-z][\s\S]*>/i.test(htmlContent)) {
+      console.log('No HTML tags found after conversion, using paragraph fallback')
+      const paragraphs = content
+        .trim()
+        .split(/\n\s*\n/) // Split on double line breaks (paragraph breaks)
+        .filter(p => p.trim().length > 0) // Remove empty paragraphs
+        .map(p => `<p>${p.trim().replace(/\n/g, ' ')}</p>`) // Convert to HTML paragraphs, replace single line breaks with spaces
+
+      console.log('Split into paragraphs:', paragraphs)
+      const result = paragraphs.join('')
+      console.log('Final HTML result:', result)
+      return result
     }
-
-    // Fallback: Split plain text content by double line breaks to preserve paragraph structure
-    const paragraphs = content
-      .trim()
-      .split(/\n\s*\n/) // Split on double line breaks (paragraph breaks)
-      .filter(p => p.trim().length > 0) // Remove empty paragraphs
-      .map(p => `<p>${p.trim().replace(/\n/g, ' ')}</p>`) // Convert to HTML paragraphs, replace single line breaks with spaces
-
-    console.log('Split into paragraphs:', paragraphs)
-    const result = paragraphs.join('')
-    console.log('Final HTML result:', result)
-
-    return result
+    
+    return htmlContent
   }
 
 
@@ -660,7 +669,14 @@ export default function WritingChat({
               variant="ghost"
               className="h-8 w-8 p-0"
               onClick={() => updateCollapsed(!collapsed)}
-              title={collapsed ? 'Expand chat' : 'Collapse chat'}
+              disabled={isActive}
+              title={
+                isActive 
+                  ? 'Cannot collapse while generating response' 
+                  : collapsed 
+                    ? 'Expand chat' 
+                    : 'Collapse chat'
+              }
             >
               {collapsed ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </Button>
@@ -691,21 +707,9 @@ export default function WritingChat({
                       <div className="space-y-2">
                         {message.role === 'assistant' ? (
                           message.content ? (
-                            /<\/?[a-z][\s\S]*>/i.test(message.content) ? (
-                              <div 
-                                className="text-base leading-relaxed [&_p]:leading-relaxed [&_strong]:font-semibold"
-                                dangerouslySetInnerHTML={{ 
-                                  __html: message.content
-                                    .replace(/<h1>/g, '<h1 style="font-size: 1.5rem; font-weight: bold; margin-bottom: 1rem; margin-top: 1.5rem;">')
-                                    .replace(/<h2>/g, '<h2 style="font-size: 1.25rem; font-weight: bold; margin-bottom: 0.75rem; margin-top: 1.25rem;">')
-                                    .replace(/<h3>/g, '<h3 style="font-size: 1.125rem; font-weight: bold; margin-bottom: 0.5rem; margin-top: 1rem;">')
-                                }}
-                              />
-                            ) : (
-                              <AIResponse className="text-base leading-relaxed">
-                                {message.content}
-                              </AIResponse>
-                            )
+                            <AIResponse className="text-base leading-relaxed">
+                              {message.content}
+                            </AIResponse>
                           ) : (
                             <TextShimmer className="text-sm leading-relaxed text-muted-foreground/70">
                               AI thinking...
@@ -762,10 +766,10 @@ export default function WritingChat({
                   setCreateButtonClicked(true)
 
                   const message = mode === 'intro'
-                    ? 'Write ONLY the book introduction. Format your response in HTML using <p> tags for paragraphs, <strong> for bold text, and <em> for italic text. Do not add any commentary before or after.'
+                    ? 'Write ONLY the book introduction. Start with an "Introduction" heading using ## markdown syntax, then write the introduction content. Format your response in markdown using **bold** for emphasis, *italic* for emphasis, and proper paragraph breaks. Do not add any commentary before or after.'
                     : mode === 'conclusion'
-                      ? 'Write ONLY the book conclusion. Format your response in HTML using <p> tags for paragraphs, <strong> for bold text, and <em> for italic text. Do not add any commentary before or after.'
-                      : `Write ONLY the chapter content for the chapter titled "${headerContext || 'Untitled Chapter'}". Format your response in HTML using <p> tags for paragraphs, <strong> for bold text, and <em> for italic text. Do not add any commentary before or after.`
+                      ? 'Write ONLY the book conclusion. Start with a "Conclusion" heading using ## markdown syntax, then write the conclusion content. Format your response in markdown using **bold** for emphasis, *italic* for emphasis, and proper paragraph breaks. Do not add any commentary before or after.'
+                      : `Write ONLY the chapter content for the chapter titled "${headerContext || 'Untitled Chapter'}". Start with a "${headerContext || 'Untitled Chapter'}" heading using ## markdown syntax, then write the chapter content. Format your response in markdown using **bold** for emphasis, *italic* for emphasis, and proper paragraph breaks. Do not add any commentary before or after.`
                   setInputMessage('')
 
                   // Create a hidden user message that won't be displayed
@@ -806,7 +810,11 @@ export default function WritingChat({
                     },
                     body: JSON.stringify({
                       message: message,
-                      bookContext,
+                      bookContext: {
+                        ...bookContext,
+                        currentSection: mode,
+                        currentSectionTitle: headerContext
+                      },
                       conversationHistory: messages.map(msg => ({
                         role: msg.role,
                         content: msg.content

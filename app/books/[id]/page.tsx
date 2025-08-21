@@ -69,7 +69,7 @@ interface AudioGeneration {
   audioUrl: string | null
   voiceId: string
   voiceName: string
-  contentType: 'INTRODUCTION' | 'CHAPTER' | 'FULL_BOOK'
+  contentType: 'INTRODUCTION' | 'CHAPTER' | 'CONCLUSION' | 'FULL_BOOK'
   textLength: number
   status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
   jobId?: string | null
@@ -177,7 +177,7 @@ export default function BookEditPage() {
   const [showVoiceGenerator, setShowVoiceGenerator] = useState(false)
   const [voiceGeneratorContent, setVoiceGeneratorContent] = useState({
     content: '',
-    type: 'introduction' as 'introduction' | 'chapter',
+    type: 'introduction' as 'introduction' | 'chapter' | 'conclusion',
     chapterTitle: ''
   })
   const [selectedVoice, setSelectedVoice] = useState<FishAudioVoice | null>(null)
@@ -584,11 +584,20 @@ export default function BookEditPage() {
       const chapterTextContent = chapter.content.replace(/<[^>]*>/g, '').trim()
       fullContent += `${chapter.title}.\n\n${chapterTextContent}`
 
-      // Add spacing between chapters (but not after the last one)
-      if (index < chaptersWithContent.length - 1) {
+      // Add spacing between chapters (but not after the last one unless we have a conclusion)
+      if (index < chaptersWithContent.length - 1 || (book?.conclusion && book.conclusion.replace(/<[^>]*>/g, '').trim().length > 0)) {
         fullContent += '\n\n'
       }
     })
+
+    // Add conclusion if it has content
+    if (book?.conclusion) {
+      const conclusionTextContent = book.conclusion.replace(/<[^>]*>/g, '').trim()
+      const conclusionWordCount = conclusionTextContent.split(/\s+/).filter(w => w.length > 0).length
+      if (conclusionWordCount > 0) {
+        fullContent += `Conclusion.\n\n${conclusionTextContent}`
+      }
+    }
 
     setIsGeneratingAudio(true)
     setGeneratingFor('full-audiobook')
@@ -628,7 +637,7 @@ export default function BookEditPage() {
     }
   }
 
-  const handleGenerateAudio = async (content: string, type: 'introduction' | 'chapter', chapterTitle?: string, chapterId?: string) => {
+  const handleGenerateAudio = async (content: string, type: 'introduction' | 'chapter' | 'conclusion', chapterTitle?: string, chapterId?: string) => {
     if (!selectedVoice) {
       alert('Please select a voice first')
       return
@@ -639,7 +648,7 @@ export default function BookEditPage() {
     }
 
     const textContent = content.replace(/<[^>]*>/g, '').trim()
-    const contentId = chapterTitle || 'introduction'
+    const contentId = chapterTitle || type
 
     setIsGeneratingAudio(true)
     setGeneratingFor(contentId)
@@ -654,7 +663,7 @@ export default function BookEditPage() {
           voiceId: selectedVoice._id,
           voiceName: selectedVoice.title,
           text: textContent,
-          chapterTitle: chapterTitle || 'Introduction',
+          chapterTitle: chapterTitle || (type === 'introduction' ? 'Introduction' : type === 'conclusion' ? 'Conclusion' : 'Chapter'),
           bookTitle: book?.title,
           bookId: book?.id,
           chapterId: chapterId || null,
@@ -690,7 +699,7 @@ export default function BookEditPage() {
   // SWR handles data fetching and revalidation automatically
 
   // Helper function to get audio generation status for a specific content
-  const getAudioStatus = (chapterId: string | null, contentType: 'INTRODUCTION' | 'CHAPTER') => {
+  const getAudioStatus = (chapterId: string | null, contentType: 'INTRODUCTION' | 'CHAPTER' | 'CONCLUSION') => {
     return book?.audioGenerations?.find(ag =>
       ag.chapterId === chapterId && ag.contentType === contentType
     )
@@ -1305,6 +1314,7 @@ export default function BookEditPage() {
                     customInstructions: book.customInstructions || undefined,
                     currentContent: getTextContent(introductionContent),
                     fullIntroduction: book.introduction || undefined,
+                    fullConclusion: book.conclusion || undefined,
                     chapters: book.chapters.map(chapter => ({
                       id: chapter.id,
                       title: chapter.title,
@@ -1400,6 +1410,7 @@ export default function BookEditPage() {
                     customInstructions: book.customInstructions || undefined,
                     currentContent: getTextContent(conclusionContent),
                     fullIntroduction: book.introduction || undefined,
+                    fullConclusion: book.conclusion || undefined,
                     chapters: book.chapters.map(chapter => ({
                       id: chapter.id,
                       title: chapter.title,
@@ -1494,7 +1505,8 @@ export default function BookEditPage() {
                             targetAudience: book.targetAudience || undefined,
                             customInstructions: book.customInstructions || undefined,
                             currentContent: (editingChapter?.content || '').replace(/<[^>]*>/g, ''),
-                            fullIntroduction: undefined,
+                            fullIntroduction: book.introduction || undefined,
+                            fullConclusion: book.conclusion || undefined,
                             chapters: book.chapters.map(chapter => ({
                               id: chapter.id,
                               title: chapter.title,
@@ -1653,13 +1665,19 @@ export default function BookEditPage() {
                           return wordCount > 0
                         })()
 
+                        const hasConclusionContent = book.conclusion && (() => {
+                          const textContent = book.conclusion.replace(/<[^>]*>/g, '').trim()
+                          const wordCount = textContent.split(/\s+/).filter(w => w.length > 0).length
+                          return wordCount > 0
+                        })()
+
                         const chaptersWithContent = book.chapters.filter(chapter => {
                           const textContent = chapter.content.replace(/<[^>]*>/g, '').trim()
                           const wordCount = textContent.split(/\s+/).filter(w => w.length > 0).length
                           return wordCount > 0
                         })
 
-                        const totalContentPieces = (hasIntroContent ? 1 : 0) + chaptersWithContent.length
+                        const totalContentPieces = (hasIntroContent ? 1 : 0) + (hasConclusionContent ? 1 : 0) + chaptersWithContent.length
 
                         return totalContentPieces > 1
                       })() && (
@@ -1680,7 +1698,7 @@ export default function BookEditPage() {
                                 variant="default"
                                 size="sm"
                                 onClick={() => handleGenerateFullAudiobook()}
-                                disabled={!selectedVoice || isGeneratingAudio}
+                                disabled={!selectedVoice || (isGeneratingAudio && generatingFor === 'full-audiobook')}
                                 className="bg-primary hover:bg-primary/90"
                               >
                                 {isGeneratingAudio && generatingFor === 'full-audiobook' ? (
@@ -1739,7 +1757,7 @@ export default function BookEditPage() {
                                 variant={selectedVoice ? "default" : "outline"}
                                 size="sm"
                                 onClick={() => handleGenerateAudio(book.introduction || '', 'introduction')}
-                                disabled={!selectedVoice || isGeneratingAudio || (() => {
+                                disabled={!selectedVoice || (isGeneratingAudio && generatingFor === 'introduction') || (() => {
                                   const introStatus = getAudioStatus(null, 'INTRODUCTION')
                                   return introStatus?.status === 'PENDING' || introStatus?.status === 'PROCESSING'
                                 })()}
@@ -1747,7 +1765,7 @@ export default function BookEditPage() {
                                 {(() => {
                                   const introStatus = getAudioStatus(null, 'INTRODUCTION')
 
-                                  // Show processing immediately if we're generating this content
+                                  // Show processing immediately if we're generating this specific content
                                   if (isGeneratingAudio && generatingFor === 'introduction') {
                                     return (
                                       <>
@@ -1846,6 +1864,138 @@ export default function BookEditPage() {
                           </div>
                         )}
 
+                      {/* Conclusion Option */}
+                      {book.conclusion && (() => {
+                        const textContent = book.conclusion.replace(/<[^>]*>/g, '').trim()
+                        const wordCount = textContent.split(/\s+/).filter(w => w.length > 0).length
+                        return wordCount > 0
+                      })() && (
+                          <div className="border rounded-lg p-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-3">
+                                <FileText className="h-5 w-5 text-muted-foreground" />
+                                <div>
+                                  <h4 className="font-medium">Conclusion</h4>
+                                  <p className="text-sm text-muted-foreground">
+                                    {(() => {
+                                      const textContent = book.conclusion.replace(/<[^>]*>/g, '').trim()
+                                      const wordCount = textContent.split(/\s+/).filter(w => w.length > 0).length
+                                      return `${wordCount} words`
+                                    })()}
+                                  </p>
+                                </div>
+                              </div>
+                              <Button
+                                variant={selectedVoice ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => handleGenerateAudio(book.conclusion || '', 'conclusion')}
+                                disabled={!selectedVoice || (isGeneratingAudio && generatingFor === 'conclusion') || (() => {
+                                  const conclusionStatus = getAudioStatus(null, 'CONCLUSION')
+                                  return conclusionStatus?.status === 'PENDING' || conclusionStatus?.status === 'PROCESSING'
+                                })()}
+                              >
+                                {(() => {
+                                  const conclusionStatus = getAudioStatus(null, 'CONCLUSION')
+
+                                  // Show processing immediately if we're generating this specific content
+                                  if (isGeneratingAudio && generatingFor === 'conclusion') {
+                                    return (
+                                      <>
+                                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                        Processing...
+                                      </>
+                                    )
+                                  }
+
+                                  // Only show job status for truly active jobs (PENDING/PROCESSING)
+                                  if (conclusionStatus?.status === 'PENDING') {
+                                    return (
+                                      <>
+                                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                        Queued...
+                                      </>
+                                    )
+                                  }
+
+                                  if (conclusionStatus?.status === 'PROCESSING') {
+                                    return (
+                                      <>
+                                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                        Processing...
+                                      </>
+                                    )
+                                  }
+
+                                  // For FAILED, COMPLETED, or no status, show appropriate static button
+                                  if (conclusionStatus?.status === 'FAILED') {
+                                    return (
+                                      <>
+                                        <X className="h-4 w-4 mr-2" />
+                                        Retry Audio
+                                      </>
+                                    )
+                                  }
+
+                                  if (conclusionStatus?.status === 'COMPLETED' && conclusionStatus.audioUrl) {
+                                    return (
+                                      <>
+                                        <RefreshCw className="h-4 w-4 mr-2" />
+                                        Regenerate Audio
+                                      </>
+                                    )
+                                  }
+
+                                  // Default state - no existing audio or incomplete
+                                  return (
+                                    <>
+                                      <Volume2 className="h-4 w-4 mr-2" />
+                                      Generate Audio
+                                    </>
+                                  )
+                                })()}
+                              </Button>
+                            </div>
+                            {/* Audio Player for Conclusion */}
+                            {(() => {
+                              const conclusionAudio = book.audioGenerations?.find(
+                                audio => audio.contentType === 'CONCLUSION'
+                              )
+
+                              if (!conclusionAudio) return null
+
+                              if (conclusionAudio.status === 'COMPLETED' && conclusionAudio.audioUrl) {
+                                return (
+                                  <div className="mt-3">
+                                    <AudioPlayer
+                                      audioUrl={conclusionAudio.audioUrl}
+                                      title="Conclusion"
+                                      voiceName={conclusionAudio.voiceName}
+                                    />
+                                  </div>
+                                )
+                              }
+
+                              if (conclusionAudio.status === 'FAILED') {
+                                return (
+                                  <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+                                    <div className="flex items-center gap-2 text-red-600 dark:text-red-400 text-sm">
+                                      <X className="h-4 w-4" />
+                                      <span>Audio generation failed</span>
+                                    </div>
+                                    {conclusionAudio.errorMessage && (
+                                      <p className="text-xs text-red-500 dark:text-red-400 mt-1">
+                                        {conclusionAudio.errorMessage}
+                                      </p>
+                                    )}
+                                  </div>
+                                )
+                              }
+
+                              return null
+                            })()}
+                          </div>
+                        )}
+
                       {/* Chapters Options */}
                       {book.chapters.filter(chapter => {
                         const textContent = chapter.content.replace(/<[^>]*>/g, '').trim()
@@ -1867,7 +2017,7 @@ export default function BookEditPage() {
                               variant={selectedVoice ? "default" : "outline"}
                               size="sm"
                               onClick={() => handleGenerateAudio(chapter.content, 'chapter', chapter.title, chapter.id)}
-                              disabled={!selectedVoice || isGeneratingAudio || (() => {
+                              disabled={!selectedVoice || (isGeneratingAudio && generatingFor === chapter.title) || (() => {
                                 const chapterStatus = getAudioStatus(chapter.id, 'CHAPTER')
                                 return chapterStatus?.status === 'PENDING' || chapterStatus?.status === 'PROCESSING'
                               })()}
@@ -1875,7 +2025,7 @@ export default function BookEditPage() {
                               {(() => {
                                 const chapterStatus = getAudioStatus(chapter.id, 'CHAPTER')
 
-                                // Show processing immediately if we're generating this content
+                                // Show processing immediately if we're generating this specific content
                                 if (isGeneratingAudio && generatingFor === chapter.title) {
                                   return (
                                     <>
@@ -1981,13 +2131,19 @@ export default function BookEditPage() {
                           return wordCount > 0
                         })()
 
+                        const hasConclusionContent = book.conclusion && (() => {
+                          const textContent = book.conclusion.replace(/<[^>]*>/g, '').trim()
+                          const wordCount = textContent.split(/\s+/).filter(w => w.length > 0).length
+                          return wordCount > 0
+                        })()
+
                         const hasChapterContent = book.chapters.some(chapter => {
                           const textContent = chapter.content.replace(/<[^>]*>/g, '').trim()
                           const wordCount = textContent.split(/\s+/).filter(w => w.length > 0).length
                           return wordCount > 0
                         })
 
-                        return !hasIntroContent && !hasChapterContent
+                        return !hasIntroContent && !hasConclusionContent && !hasChapterContent
                       })() && (
                           <div className="text-center py-8 text-muted-foreground">
                             <Volume2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -2033,8 +2189,17 @@ export default function BookEditPage() {
                           <SelectValue placeholder="Select a genre..." />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="Fiction">Fiction</SelectItem>
-                          <SelectItem value="Non-Fiction">Non-Fiction</SelectItem>
+                          <SelectItem value="Romance">Romance</SelectItem>
+                          <SelectItem value="Mystery & Thriller">Mystery & Thriller</SelectItem>
+                          <SelectItem value="Fantasy">Fantasy</SelectItem>
+                          <SelectItem value="Science Fiction">Science Fiction</SelectItem>
+                          <SelectItem value="Historical Fiction">Historical Fiction</SelectItem>
+                          <SelectItem value="Literary Fiction">Literary Fiction</SelectItem>
+                          <SelectItem value="Horror">Horror</SelectItem>
+                          <SelectItem value="Adventure">Adventure</SelectItem>
+                          <SelectItem value="Western">Western</SelectItem>
+                          <SelectItem value="Young Adult Fiction">Young Adult Fiction</SelectItem>
+                          <SelectItem value="Children's Fiction">Children's Fiction</SelectItem>
                           <SelectItem value="Biography">Biography</SelectItem>
                           <SelectItem value="Self-Help">Self-Help</SelectItem>
                           <SelectItem value="Business">Business</SelectItem>
@@ -2043,13 +2208,13 @@ export default function BookEditPage() {
                           <SelectItem value="History">History</SelectItem>
                           <SelectItem value="Science">Science</SelectItem>
                           <SelectItem value="Philosophy">Philosophy</SelectItem>
-                          <SelectItem value="Romance">Romance</SelectItem>
-                          <SelectItem value="Mystery & Thriller">Mystery & Thriller</SelectItem>
-                          <SelectItem value="Fantasy">Fantasy</SelectItem>
-                          <SelectItem value="Science Fiction">Science Fiction</SelectItem>
-                          <SelectItem value="Children&apos;s">Children&apos;s</SelectItem>
-                          <SelectItem value="Young Adult">Young Adult</SelectItem>
-                          <SelectItem value="Other">Other</SelectItem>
+                          <SelectItem value="Travel">Travel</SelectItem>
+                          <SelectItem value="Cooking">Cooking</SelectItem>
+                          <SelectItem value="Politics">Politics</SelectItem>
+                          <SelectItem value="Religion">Religion</SelectItem>
+                          <SelectItem value="Education">Education</SelectItem>
+                          <SelectItem value="Memoir">Memoir</SelectItem>
+                          <SelectItem value="True Crime">True Crime</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

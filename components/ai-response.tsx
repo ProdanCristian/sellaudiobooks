@@ -50,34 +50,14 @@ const components: Options['components'] = {
       {children}
     </h1>
   ),
-  h2: ({ node: _node, children, className, ..._props }) => {
-    // Special styling for Introduction and Conclusion headings
-    const text = String(children);
-    const isIntroduction = text.toLowerCase().includes('introduction');
-    const isConclusion = text.toLowerCase().includes('conclusion');
-    
-    if (isIntroduction || isConclusion) {
-      return (
-        <div className="mt-5 mb-4">
-          <h2
-            className={cn('inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold bg-primary/10 text-primary border border-primary/20', className)}
-            {..._props}
-          >
-            {isIntroduction ? '📝' : '🎯'} {children}
-          </h2>
-        </div>
-      );
-    }
-    
-    return (
-      <h2
-        className={cn('mt-5 mb-2 font-semibold text-xl', className)}
-        {..._props}
-      >
-        {children}
-      </h2>
-    );
-  },
+  h2: ({ node: _node, children, className, ..._props }) => (
+    <h2
+      className={cn('mt-5 mb-2 font-semibold text-xl', className)}
+      {..._props}
+    >
+      {children}
+    </h2>
+  ),
   h3: ({ node: _node, children, className, ..._props }) => (
     <h3 className={cn('mt-4 mb-2 font-semibold text-lg', className)} {..._props}>
       {children}
@@ -102,7 +82,7 @@ const components: Options['components'] = {
     </h6>
   ),
   p: ({ node: _node, children, className, ..._props }) => (
-    <p className={cn('mb-4 leading-relaxed', className)} {..._props}>
+    <p className={cn('leading-relaxed', className)} {..._props}>
       {children}
     </p>
   ),
