@@ -76,7 +76,7 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: "https",
-        hostname: "cdn.aimlapi.com",
+        hostname: "cdn.cometapi.com",
         port: "",
         pathname: "/**",
       },

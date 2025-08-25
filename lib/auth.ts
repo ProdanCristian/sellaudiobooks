@@ -77,10 +77,6 @@ export const authOptions: NextAuthOptions = {
   events: {
     async linkAccount({ user, account }) {
       // This event fires when an account is linked to a user
-      console.log("Account linked:", {
-        user: user.email,
-        provider: account.provider,
-      });
     },
   },
   callbacks: {

@@ -8,6 +8,7 @@ export default withAuth(
     const isAuthPage = req.nextUrl.pathname.startsWith('/auth')
     const isDashboard = req.nextUrl.pathname.startsWith('/dashboard')
     const isCollection = req.nextUrl.pathname.startsWith('/collection')
+    const isBook = req.nextUrl.pathname.startsWith('/book')
     const isBooks = req.nextUrl.pathname.startsWith('/books')
 
     // Redirect authenticated users away from auth pages
@@ -15,8 +16,8 @@ export default withAuth(
       return NextResponse.redirect(new URL('/dashboard', req.url))
     }
 
-    // Protect dashboard, collection, and books routes
-    if ((isDashboard || isCollection || isBooks) && !isAuth) {
+    // Protect dashboard, collection, book, and books routes
+    if ((isDashboard || isCollection || isBook || isBooks) && !isAuth) {
       let from = req.nextUrl.pathname;
       if (req.nextUrl.search) {
         from += req.nextUrl.search;

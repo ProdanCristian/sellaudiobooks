@@ -5,20 +5,15 @@ import { prisma } from '@/lib/prisma'
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('Book creation from signup - Starting...')
     const session = await getServerSession(authOptions)
-    console.log('Session:', session?.user?.email)
     
     if (!session?.user?.email) {
-      console.log('No session or email found')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { title, coverImage, customInstructions } = await request.json()
-    console.log('Book data received:', { title, coverImage, customInstructions })
 
     if (!title) {
-      console.log('No title provided')
       return NextResponse.json({ error: 'Title is required' }, { status: 400 })
     }
 
@@ -26,10 +21,8 @@ export async function POST(request: NextRequest) {
     const user = await prisma.user.findUnique({
       where: { email: session.user.email }
     })
-    console.log('User found:', user?.id)
 
     if (!user) {
-      console.log('User not found in database')
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
@@ -43,7 +36,6 @@ export async function POST(request: NextRequest) {
         status: 'DRAFT'
       }
     })
-    console.log('Book created successfully:', book.id)
 
     return NextResponse.json(book, { status: 201 })
   } catch (error) {

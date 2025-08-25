@@ -3,7 +3,7 @@ import { Geist, Geist_Mono, Michroma } from "next/font/google";
 import "./globals.css";
 import Providers from "@/components/providers/session-provider";
 import { Toaster } from "@/components/ui/sonner"
-import BackgroundGradients from "@/components/background-gradients"
+import BackgroundGradients from "@/components/layout/background-gradients"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

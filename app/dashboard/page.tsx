@@ -2,9 +2,9 @@
 
 import { useSession } from 'next-auth/react'
 import { useEffect } from 'react'
-import Header from '@/components/header'
-import SimpleCards from '@/components/simple-cards'
-import UserBooks from '@/components/user-books'
+import Header from '@/components/layout/header'
+import SimpleCards from '@/components/dashboard/simple-cards'
+import UserBooks from '@/components/dashboard/user-books'
 
 const Dashboard = () => {
   const { data: session, status } = useSession()
@@ -29,7 +29,6 @@ const Dashboard = () => {
 
   const createPendingBook = async (title: string, cover: string) => {
     try {
-      console.log('Creating pending book:', { title, cover })
       const response = await fetch('/api/books/create-from-signup', {
         method: 'POST',
         headers: {
@@ -46,7 +45,6 @@ const Dashboard = () => {
       if (!response.ok) {
         console.error('Error creating pending book:', result)
       } else {
-        console.log('Pending book created successfully:', result)
         // Refresh the page to show the new book
         window.location.reload()
       }

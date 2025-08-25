@@ -1,7 +1,6 @@
 import { BookStatus } from '@prisma/client'
 
 interface BookStatusData {
-  introduction?: string | null
   chaptersCount: number
   totalWordCount?: number
 }
@@ -10,7 +9,6 @@ interface BookStatusData {
  * Determines the appropriate book status based on content
  */
 export function calculateBookStatus(data: BookStatusData, currentStatus?: BookStatus): BookStatus {
-  const hasIntroduction = data.introduction && data.introduction.replace(/<[^>]*>/g, '').trim().length > 0
   const hasChapters = data.chaptersCount > 0
   
   // Don't automatically downgrade from COMPLETED or PUBLISHED
@@ -18,8 +16,8 @@ export function calculateBookStatus(data: BookStatusData, currentStatus?: BookSt
     return currentStatus
   }
   
-  // If there's either introduction content or chapters, move to IN_PROGRESS
-  if (hasIntroduction || hasChapters) {
+  // If there are chapters, move to IN_PROGRESS
+  if (hasChapters) {
     return BookStatus.IN_PROGRESS
   }
   

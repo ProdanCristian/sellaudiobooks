@@ -24,6 +24,9 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@repo/*": [
+        "./components/ui/repo/*"
       ]
     },
     "target": "ES2017"
@@ -35,6 +38,7 @@
     ".next/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "components/ui/shadcn-io/ai/**/*"
   ]
 }

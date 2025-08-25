@@ -11,7 +11,6 @@ export default function Providers({ children }: { children: React.ReactNode }) {
       enableSystem={false}
       forcedTheme="dark"
       disableTransitionOnChange
-      suppressHydrationWarning
     >
       <SessionProvider>{children}</SessionProvider>
     </ThemeProvider>

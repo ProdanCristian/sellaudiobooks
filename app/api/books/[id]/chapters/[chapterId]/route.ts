@@ -132,7 +132,6 @@ export async function DELETE(
       // Check if we should update book status (when going from 1 to 0 chapters)
       const newChapterCount = book._count.chapters - 1
       const newStatus = shouldUpdateBookStatus({
-        introduction: book.introduction,
         chaptersCount: newChapterCount
       }, book.status)
 
@@ -141,7 +140,6 @@ export async function DELETE(
           where: { id: id },
           data: { status: newStatus }
         })
-        console.log(`📚 Auto-updating book status from ${book.status} to ${newStatus} (chapter deleted)`)
       }
     })
 

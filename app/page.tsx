@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import React from "react";
 import Link from "next/link";
 import { TextEffect } from "@/components/motion-primitives/text-effect";
-import Header from "@/components/header";
-import AiPrompt from "@/components/ai-prompt";
+import Header from "@/components/layout/header";
+import AiPrompt from "@/components/shared/ai-prompt";
 
 export default function Home() {
   const { status } = useSession();

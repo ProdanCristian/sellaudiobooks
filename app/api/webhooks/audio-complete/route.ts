@@ -31,7 +31,6 @@ export async function POST(request: NextRequest) {
     })
 
     if (!audioJob) {
-      console.log(`Webhook received for unknown job: ${payload.id}`)
       return NextResponse.json({ error: 'Job not found' }, { status: 404 })
     }
 
@@ -43,7 +42,7 @@ export async function POST(request: NextRequest) {
       }
 
       const audioBuffer = await audioResponse.arrayBuffer()
-      const audioKey = `audio/${audioJob.bookId}/${audioJob.chapterId || 'introduction'}-${Date.now()}.mp3`
+      const audioKey = `audio/${audioJob.bookId}/${audioJob.chapterId || 'chapter'}-${Date.now()}.mp3`
 
       // Upload to R2
       await r2Client.send(new PutObjectCommand({
@@ -69,7 +68,7 @@ export async function POST(request: NextRequest) {
         where: {
           bookId_chapterId_contentType: {
             bookId: audioJob.bookId,
-            chapterId: audioJob.chapterId,
+            chapterId: audioJob.chapterId || '',
             contentType: audioJob.contentType,
           }
         },
@@ -94,8 +93,6 @@ export async function POST(request: NextRequest) {
         }
       })
 
-      console.log(`Audio generation completed for job ${payload.id}`)
-      
     } else if (payload.status === 'failed') {
       // Update job with error
       await prisma.audioJob.update({
@@ -111,7 +108,7 @@ export async function POST(request: NextRequest) {
         where: {
           bookId_chapterId_contentType: {
             bookId: audioJob.bookId,
-            chapterId: audioJob.chapterId,
+            chapterId: audioJob.chapterId || '',
             contentType: audioJob.contentType,
           }
         },
@@ -133,7 +130,6 @@ export async function POST(request: NextRequest) {
         }
       })
 
-      console.log(`Audio generation failed for job ${payload.id}: ${payload.error_message}`)
     }
 
     return NextResponse.json({ success: true })

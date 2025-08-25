@@ -40,6 +40,13 @@ export async function GET(
         chapters: {
           orderBy: { order: 'asc' }
         },
+        outline: {
+          include: {
+            chapters: {
+              orderBy: { order: 'asc' }
+            }
+          }
+        },
         _count: {
           select: { chapters: true }
         }
@@ -94,7 +101,7 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const { title, introduction, customInstructions, genre, targetAudience, status } = body
+    const { title, customInstructions, genre, targetAudience, status } = body
 
     const book = await prisma.book.findFirst({
       where: { 
@@ -111,7 +118,6 @@ export async function PUT(
       where: { id: id },
       data: {
         ...(title?.trim() && { title: title.trim() }),
-        ...(introduction !== undefined && { introduction: introduction || null }),
         ...(customInstructions !== undefined && { customInstructions: customInstructions?.trim() || null }),
         ...(genre?.trim() && { genre: genre.trim() }),
         ...(targetAudience?.trim() && { targetAudience: targetAudience.trim() }),
@@ -167,24 +173,20 @@ export async function PATCH(
     const updateData: Record<string, string | null | undefined> = {}
     
     if (body.title !== undefined) updateData.title = body.title.trim()
-    if (body.introduction !== undefined) updateData.introduction = body.introduction || null
-    if (body.conclusion !== undefined) updateData.conclusion = body.conclusion || null
     if (body.customInstructions !== undefined) updateData.customInstructions = body.customInstructions?.trim() || null
     if (body.genre !== undefined) updateData.genre = body.genre.trim()
     if (body.targetAudience !== undefined) updateData.targetAudience = body.targetAudience.trim()
     if (body.status !== undefined) updateData.status = body.status
     if (body.coverImage !== undefined) updateData.coverImage = body.coverImage
 
-    // Auto-update status based on content if introduction is being updated and status is not explicitly set
-    if (body.introduction !== undefined && body.status === undefined) {
+    // Auto-update status based on content if chapters exist and status is not explicitly set
+    if (body.status === undefined) {
       const newStatus = shouldUpdateBookStatus({
-        introduction: body.introduction || null,
         chaptersCount: book._count.chapters
       }, book.status)
       
       if (newStatus) {
         updateData.status = newStatus
-        console.log(`📚 Auto-updating book status from ${book.status} to ${newStatus}`)
       }
     }
 
@@ -237,21 +239,17 @@ export async function DELETE(
     }
 
     // Clean up all R2 files associated with this book
-    console.log(`🗑️ Starting R2 cleanup for book: ${book.title} (${book.id})`)
-    
     const filesToDelete = []
     
     // Add cover image if exists
     if (book.coverImage) {
       filesToDelete.push(book.coverImage)
-      console.log(`📷 Found cover image to delete: ${book.coverImage}`)
     }
     
     // Add all audio files
     for (const audio of book.audioGenerations) {
       if (audio.audioUrl) {
         filesToDelete.push(audio.audioUrl)
-        console.log(`🔊 Found audio file to delete: ${audio.audioUrl}`)
       }
     }
     
@@ -259,24 +257,18 @@ export async function DELETE(
     const deletePromises = filesToDelete.map(async (fileUrl) => {
       try {
         await deleteFileFromR2ByUrl('sellaudiobooks', fileUrl)
-        console.log(`✅ Deleted from R2: ${fileUrl}`)
       } catch (error) {
-        console.warn(`⚠️ Failed to delete from R2 (${fileUrl}):`, error)
         // Continue with deletion even if R2 cleanup fails
       }
     })
     
     // Run R2 cleanup in parallel with database deletion
-    Promise.allSettled(deletePromises).then(() => {
-      console.log(`🎉 R2 cleanup completed for book: ${book.title}`)
-    })
+    Promise.allSettled(deletePromises)
 
     // Delete the book from database (cascade will handle related records)
     await prisma.book.delete({
       where: { id: id }
     })
-    
-    console.log(`📚 Book deleted from database: ${book.title} (${book.id})`)
 
     return NextResponse.json({ message: 'Book deleted successfully' })
   } catch (error) {

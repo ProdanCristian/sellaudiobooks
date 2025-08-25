@@ -85,7 +85,6 @@ export async function deleteFileFromR2(bucketName: string, key: string): Promise
       Key: key
     })
     await r2Client.send(command)
-    console.log(`Successfully deleted file: ${key} from bucket: ${bucketName}`)
   } catch (error) {
     console.error(`Error deleting file ${key} from bucket ${bucketName}:`, error)
     throw error

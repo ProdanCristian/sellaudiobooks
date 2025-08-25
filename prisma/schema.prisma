@@ -58,8 +58,6 @@ model VerificationToken {
 model Book {
   id                 String      @id @default(cuid())
   title              String
-  introduction       String?     @db.Text
-  conclusion         String?     @db.Text
   customInstructions String?     @db.Text
   genre              String?
   targetAudience     String?
@@ -72,6 +70,7 @@ model Book {
   chapters           Chapter[]
   audioGenerations   AudioGeneration[]
   audioJobs          AudioJob[]
+  outline            Outline?
 }
 
 model Chapter {
@@ -136,7 +135,6 @@ enum BookStatus {
 }
 
 enum AudioContentType {
-  INTRODUCTION
   CHAPTER
   FULL_BOOK
 }
@@ -146,4 +144,28 @@ enum AudioJobStatus {
   PROCESSING
   COMPLETED
   FAILED
+}
+
+model Outline {
+  id          String            @id @default(cuid())
+  suggestions String[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  bookId      String            @unique
+  book        Book              @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  chapters    OutlineChapter[]
+}
+
+model OutlineChapter {
+  id          String   @id @default(cuid())
+  title       String
+  description String   @db.Text
+  keyPoints   String[]
+  order       Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  outlineId   String
+  outline     Outline  @relation(fields: [outlineId], references: [id], onDelete: Cascade)
+
+  @@unique([outlineId, order])
 }
