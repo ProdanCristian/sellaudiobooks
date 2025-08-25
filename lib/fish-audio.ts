@@ -1,4 +1,4 @@
-import { encode } from '@msgpack/msgpack';
+import { encode } from "@msgpack/msgpack";
 
 export interface FishAudioVoice {
   _id: string;
@@ -110,39 +110,72 @@ export class FishAudioClient {
     return data;
   }
 
-  async generateSpeech(voiceId: string, text: string): Promise<ArrayBuffer> {
-    const requestBody = {
-      text: text,
-      temperature: 0.7,
-      top_p: 0.7,
+  async generateSpeech(
+    voiceId: string | null,
+    text: string,
+    options?: {
+      format?: "wav" | "pcm" | "mp3" | "opus";
+      sample_rate?: number | null;
+      mp3_bitrate?: 64 | 128 | 192;
+      opus_bitrate?: -1000 | 24 | 32 | 48 | 64;
+      temperature?: number;
+      top_p?: number;
+      chunk_length?: number;
+      normalize?: boolean;
+      latency?: "normal" | "balanced";
+      prosody?: Record<string, unknown> | null;
+    }
+  ): Promise<ArrayBuffer> {
+    const {
+      format = "mp3",
+      sample_rate = 44100,
+      mp3_bitrate = 192,
+      opus_bitrate = 32,
+      temperature = 0.6,
+      top_p = 0.7,
+      chunk_length = 200,
+      normalize = true,
+      latency = "normal",
+      prosody = null,
+    } = options || {};
+
+    const requestBody: Record<string, unknown> = {
+      text,
+      temperature,
+      top_p,
       reference_id: voiceId,
-      chunk_length: 200,
-      normalize: true,
-      format: "wav",
-      mp3_bitrate: 128,
-      opus_bitrate: 32,
-      latency: "normal"
+      chunk_length,
+      normalize,
+      format,
+      sample_rate,
+      mp3_bitrate,
+      opus_bitrate,
+      latency,
     };
+
+    if (prosody) requestBody.prosody = prosody;
 
     const response = await fetch(`${this.baseUrl}/v1/tts`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${this.apiKey}`,
+        Authorization: `Bearer ${this.apiKey}`,
         "Content-Type": "application/json",
-        "model": "speech-1.5",
+        model: "s1",
       },
       body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unknown error');
-      console.error('Fish Audio API Error:', {
+      const errorText = await response.text().catch(() => "Unknown error");
+      console.error("Fish Audio API Error:", {
         status: response.status,
         statusText: response.statusText,
         body: errorText,
-        headers: Object.fromEntries(response.headers.entries())
+        headers: Object.fromEntries(response.headers.entries()),
       });
-      throw new Error(`Speech generation failed: ${response.status} ${response.statusText} - ${errorText}`);
+      throw new Error(
+        `Speech generation failed: ${response.status} ${response.statusText} - ${errorText}`
+      );
     }
 
     // The API returns binary audio data, not JSON
