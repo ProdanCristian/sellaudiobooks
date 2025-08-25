@@ -54,7 +54,7 @@ export default function OutlineTab({ book, mutate, onOutlineUpdated }: OutlineTa
   const handleRegenerateOutline = async (prompt: string) => {
     setIsRegenerating(true)
     setShowRegenerateDialog(false)
-    
+
     try {
       // First delete existing data
       await Promise.all([
@@ -85,7 +85,7 @@ export default function OutlineTab({ book, mutate, onOutlineUpdated }: OutlineTa
       }
 
       const data = await response.json()
-      
+
       if (data.outline) {
         await saveOutlineAndCreateChapters(data.outline)
         onOutlineUpdated()
@@ -103,7 +103,7 @@ export default function OutlineTab({ book, mutate, onOutlineUpdated }: OutlineTa
     try {
       console.log('Starting to save outline and create chapters for:', book.title)
       console.log('Outline data:', outlineData)
-      
+
       // First save the outline
       const outlineResponse = await fetch(`/api/books/${book.id}/outline`, {
         method: 'POST',
@@ -118,52 +118,78 @@ export default function OutlineTab({ book, mutate, onOutlineUpdated }: OutlineTa
         console.error('Failed to save outline:', errorData)
         throw new Error('Failed to save outline')
       }
-      
+
       console.log('Outline saved successfully')
 
-      // Then create chapters from the outline
+      // Then sync chapters with the outline (no content injection)
       if (outlineData.chapters && Array.isArray(outlineData.chapters)) {
-        const chapterPromises = []
-        
-        for (let i = 0; i < outlineData.chapters.length; i++) {
-          const outlineChapter = outlineData.chapters[i]
-          
-          // Generate initial chapter content based on outline
-          const initialContent = generateInitialChapterContent(outlineChapter)
-          
-          // Create chapter with explicit order to avoid conflicts
-          chapterPromises.push(
-            fetch(`/api/books/${book.id}/chapters`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                title: outlineChapter.title,
-                content: initialContent,
-                order: i + 1
-              }),
-            }).then(async (response) => {
-              if (!response.ok) {
-                const errorData = await response.text().catch(() => 'Unknown error')
-                console.error(`Failed to create chapter ${i + 1}:`, outlineChapter.title, errorData)
-                return null
-              } else {
-                const chapterData = await response.json()
-                console.log(`Successfully created chapter ${i + 1}:`, chapterData.title)
-                return chapterData
-              }
-            }).catch((error) => {
-              console.error(`Error creating chapter ${i + 1}:`, outlineChapter.title, error)
-              return null
+        try {
+          // Fetch current chapters
+          const freshRes = await fetch(`/api/books/${book.id}`)
+          const freshBook = freshRes.ok ? await freshRes.json() : { chapters: [] }
+          const currentChapters = (freshBook.chapters || []).slice().sort((a: any, b: any) => a.order - b.order)
+          const desiredChapters = outlineData.chapters
+
+          const currentCount = currentChapters.length
+          const desiredCount = desiredChapters.length
+          const pairs = Math.min(currentCount, desiredCount)
+
+          // 1) Batch reorder/retitle existing by index
+          if (pairs > 0) {
+            const updates = [] as Array<{ id: string, order: number, title: string }>
+            for (let i = 0; i < pairs; i++) {
+              const desired = desiredChapters[i]
+              const actual = currentChapters[i]
+              updates.push({ id: actual.id, order: i + 1, title: desired.title })
+            }
+            const batchRes = await fetch(`/api/books/${book.id}/chapters`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ updates })
             })
-          )
+            if (!batchRes.ok) {
+              console.error('Failed to batch update chapters on regeneration:', await batchRes.text())
+            }
+          }
+
+          // 2) Create missing chapters with empty content
+          if (desiredCount > currentCount) {
+            const createPromises: Promise<any>[] = []
+            for (let i = currentCount; i < desiredCount; i++) {
+              const desired = desiredChapters[i]
+              createPromises.push(
+                fetch(`/api/books/${book.id}/chapters`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    title: desired.title,
+                    content: '',
+                    order: i + 1
+                  })
+                }).then(async (r) => {
+                  if (!r.ok) {
+                    console.error(`Failed to create chapter ${i + 1}:`, await r.text())
+                  }
+                }).catch(err => console.error('Create error:', err))
+              )
+            }
+            await Promise.all(createPromises)
+          }
+
+          // 3) Delete extra chapters if any
+          if (currentCount > desiredCount) {
+            const deletePromises: Promise<any>[] = []
+            for (let i = desiredCount; i < currentCount; i++) {
+              const ch = currentChapters[i]
+              deletePromises.push(
+                fetch(`/api/books/${book.id}/chapters/${ch.id}`, { method: 'DELETE' })
+              )
+            }
+            await Promise.all(deletePromises)
+          }
+        } catch (err) {
+          console.error('Error syncing chapters on regeneration:', err)
         }
-        
-        // Wait for all chapters to be created
-        const results = await Promise.all(chapterPromises)
-        const successfulChapters = results.filter(Boolean)
-        console.log(`Created ${successfulChapters.length} out of ${outlineData.chapters.length} chapters`)
       }
     } catch (error) {
       console.error('Error saving outline and creating chapters:', error)
@@ -187,22 +213,22 @@ ${keyPointsList}
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 space-y-6">
+    <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 space-y-6">
       {book.outline ? (
         <div className="animate-in fade-in duration-200">
           {/* Minimal Header */}
-          <div className="flex items-center justify-between py-4">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <List className="h-5 w-5 text-primary" />
-                <h3 className="text-lg font-semibold">Book Outline</h3>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-0 py-5 sm:py-4">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-3 items-center">
+              <div className="flex items-center gap-3 sm:gap-2">
+                <List className="h-6 w-6 sm:h-5 sm:w-5 text-primary" />
+                <h3 className="text-xl sm:text-lg font-semibold">Book Outline</h3>
               </div>
-              <div className="flex items-center gap-2">
-                <Badge variant="secondary" className="text-xs">
+              <div className="flex items-center justify-center sm:justify-start gap-3 sm:gap-2 flex-wrap">
+                <Badge variant="secondary" className="text-sm sm:text-xs px-3 py-1 sm:px-2 sm:py-0.5">
                   {book.outline.chapters.length} chapters
                 </Badge>
                 {book.outline.suggestions?.length > 0 && (
-                  <Badge variant="secondary" className="text-xs">
+                  <Badge variant="secondary" className="text-sm sm:text-xs px-3 py-1 sm:px-2 sm:py-0.5">
                     {book.outline.suggestions.length} tips
                   </Badge>
                 )}
@@ -212,10 +238,10 @@ ${keyPointsList}
               onClick={() => setShowRegenerateDialog(true)}
               variant="outline"
               size="sm"
-              className="text-xs"
+              className="text-sm sm:text-xs h-10 sm:h-8 px-4 sm:px-3 w-full sm:w-auto touch-manipulation"
               disabled={isRegenerating}
             >
-              <RefreshCw className={`h-3 w-3 mr-1 ${isRegenerating ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-4 w-4 sm:h-3 sm:w-3 mr-2 sm:mr-1 ${isRegenerating ? 'animate-spin' : ''}`} />
               {isRegenerating ? 'Creating...' : 'New Outline'}
             </Button>
           </div>

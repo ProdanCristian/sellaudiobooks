@@ -59,7 +59,7 @@ export function RegenerateOutlineDialog({
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       onClick={handleBackdropClick}
     >
-      <div className="flex flex-col max-w-md w-full transition-all duration-300 backdrop-blur-md border border-border rounded-lg shadow-lg pointer-events-auto">
+      <div className="flex flex-col max-w-md w-full transition-all duration-300 backdrop-blur-xl border border-border rounded-lg shadow-lg pointer-events-auto">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border/70 bg-muted/30 rounded-t-lg">
           <div className="flex items-center gap-2">

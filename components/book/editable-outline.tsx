@@ -85,6 +85,13 @@ export function EditableOutline({ outline, book, mutate, onOutlineUpdated }: Edi
         chapterForm.customTitle || extractCustomTitle(chapterForm.title)
       )
 
+      console.log('💾 Saving outline chapter changes:', {
+        chapterId: chapterForm.id,
+        title: newTitle,
+        description: chapterForm.description.trim(),
+        keyPoints: chapterForm.keyPoints.filter((point: string) => point.trim())
+      })
+
       // Update the outline chapter
       const response = await fetch(`/api/books/${book.id}/outline`, {
         method: 'PATCH',
@@ -100,6 +107,9 @@ export function EditableOutline({ outline, book, mutate, onOutlineUpdated }: Edi
       })
 
       if (response.ok) {
+        const result = await response.json()
+        console.log('✅ Outline chapter saved successfully:', result)
+
         // Also update the corresponding actual chapter if it exists
         await syncChapterWithOutline(chapterIndex, {
           title: newTitle,
@@ -110,6 +120,14 @@ export function EditableOutline({ outline, book, mutate, onOutlineUpdated }: Edi
         setEditingChapterId(null)
         setChapterForm(null)
         onOutlineUpdated()
+
+        // Refresh UI to show synced changes
+        setTimeout(() => {
+          mutate()
+        }, 200)
+      } else {
+        const error = await response.text()
+        console.error('❌ Failed to save outline chapter:', error)
       }
     } catch (error) {
       console.error('Error saving chapter:', error)
@@ -122,14 +140,26 @@ export function EditableOutline({ outline, book, mutate, onOutlineUpdated }: Edi
     try {
       // Get current chapters from book data
       const actualChapters = book.chapters || []
-      
+
       // Find the actual chapter that corresponds to this outline position
-      const actualChapter = actualChapters.find(ch => ch.order === chapterIndex + 1)
-      
+      const actualChapter = actualChapters.find((ch: any) => ch.order === chapterIndex + 1)
+
       if (actualChapter) {
         // Update existing chapter
-        const updatedContent = generateInitialChapterContent(outlineChapter)
-        
+        console.log(`🔄 Syncing chapter ${actualChapter.id} with outline changes`)
+
+        // Decide whether to update content:
+        // - If chapter has substantial content (>200 chars), keep it
+        // - If chapter is mostly empty/template, update with new outline info
+        const hasSubstantialContent = actualChapter.content &&
+          actualChapter.content.replace(/<[^>]*>/g, '').trim().length > 200
+
+        const newContent = hasSubstantialContent
+          ? actualChapter.content  // Preserve user's writing
+          : actualChapter.content // Do not inject outline template into content
+
+        console.log(`📝 Chapter content strategy: ${hasSubstantialContent ? 'PRESERVE existing' : 'UPDATE with new outline'}`)
+
         await fetch(`/api/books/${book.id}/chapters/${actualChapter.id}`, {
           method: 'PUT',
           headers: {
@@ -137,16 +167,20 @@ export function EditableOutline({ outline, book, mutate, onOutlineUpdated }: Edi
           },
           body: JSON.stringify({
             title: outlineChapter.title,
-            content: actualChapter.content || updatedContent, // Keep existing content if it exists
+            content: newContent,
             order: chapterIndex + 1
           }),
+        }).then(response => {
+          if (response.ok) {
+            console.log(`✅ Successfully synced chapter ${actualChapter.id}`)
+          } else {
+            console.error(`❌ Failed to sync chapter ${actualChapter.id}`)
+          }
         }).catch(error => {
           console.error('Error updating actual chapter:', error)
         })
       } else {
         // Create new chapter if it doesn't exist
-        const initialContent = generateInitialChapterContent(outlineChapter)
-        
         await fetch(`/api/books/${book.id}/chapters`, {
           method: 'POST',
           headers: {
@@ -154,7 +188,7 @@ export function EditableOutline({ outline, book, mutate, onOutlineUpdated }: Edi
           },
           body: JSON.stringify({
             title: outlineChapter.title,
-            content: initialContent,
+            content: '',
             order: chapterIndex + 1
           }),
         }).catch(error => {
@@ -166,78 +200,91 @@ export function EditableOutline({ outline, book, mutate, onOutlineUpdated }: Edi
     }
   }
 
-  // SMART SYNC: Preserve content but ensure perfect order/title sync
+  // SMART SYNC: Preserve content but ensure perfect order/title sync  
+  const [isSyncing, setIsSyncing] = useState(false)
+
   const syncAllChaptersWithOutline = async () => {
+    if (isSyncing) {
+      console.log('⏸️ Sync already in progress, skipping...')
+      return
+    }
+
+    setIsSyncing(true)
     try {
       console.log('🔄 Starting SMART chapter sync - preserving content!')
-      const actualChapters = book.chapters || []
+
+      // Get absolutely fresh data to avoid conflicts
+      console.log('📡 Fetching fresh chapter data...')
+      const freshResponse = await fetch(`/api/books/${book.id}`)
+      const freshBook = freshResponse.ok ? await freshResponse.json() : book
+      const actualChapters = freshBook.chapters || []
+
       console.log('Current chapters:', actualChapters.map((ch: any) => ({ id: ch.id, title: ch.title, order: ch.order })))
       console.log('Target outline:', outline.chapters.map((ch: any, i: number) => ({ title: ch.title, targetOrder: i + 1 })))
-      
-      // Get fresh chapter data from server
-      const freshResponse = await fetch(`/api/books/${book.id}/chapters`)
-      const freshChapters = freshResponse.ok ? await freshResponse.json() : actualChapters
-      const sortedChapters = [...freshChapters].sort((a, b) => a.order - b.order)
-      
+
+      const sortedChapters = [...actualChapters].sort((a, b) => a.order - b.order)
+
       // Plan the updates
       const totalNeeded = outline.chapters.length
       const totalCurrent = sortedChapters.length
-      
+
       console.log(`📊 Need ${totalNeeded} chapters, currently have ${totalCurrent}`)
-      
-      // Step 1: Update existing chapters (preserve their content)
-      const updatePromises = []
-      for (let i = 0; i < Math.min(totalNeeded, totalCurrent); i++) {
-        const outlineChapter = outline.chapters[i]
-        const actualChapter = sortedChapters[i]
-        const newOrder = i + 1
-        
-        console.log(`📝 Updating chapter ${actualChapter.id}: order ${actualChapter.order} -> ${newOrder}, title "${actualChapter.title}" -> "${outlineChapter.title}"`)
-        
-        updatePromises.push(
-          fetch(`/api/books/${book.id}/chapters/${actualChapter.id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              title: outlineChapter.title,
-              order: newOrder
-              // Keep existing content - don't overwrite user's work
-            }),
-          }).then(r => r.ok ? console.log(`✅ Updated ${actualChapter.id}`) : console.error(`❌ Failed ${actualChapter.id}`))
-        )
+
+      // Step 1: Deterministic index-based mapping: chapter at index i -> order i+1
+      const batchedUpdates: Array<{ id: string, order: number, title: string }> = []
+      const pairs = Math.min(totalNeeded, totalCurrent)
+      for (let i = 0; i < pairs; i++) {
+        const actual = sortedChapters[i]
+        const desired = outline.chapters[i]
+        const targetOrder = i + 1
+        console.log(`📝 Planning move of chapter "${actual.title}" (order ${actual.order}) to position ${targetOrder} with title "${desired.title}"`)
+        batchedUpdates.push({ id: actual.id, order: targetOrder, title: desired.title })
       }
-      
+
+      // Execute batch update for reordering/retitling existing chapters first to avoid unique collisions
+      if (batchedUpdates.length > 0) {
+        const batchResponse = await fetch(`/api/books/${book.id}/chapters`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ updates: batchedUpdates })
+        })
+        if (!batchResponse.ok) {
+          console.error('❌ Batch update failed:', batchResponse.status, await batchResponse.text())
+        } else {
+          console.log('✅ Batch chapter reorder/title update completed')
+        }
+      }
+
       // Step 2: Create new chapters if outline has more
+      const updatePromises: Promise<any>[] = []
       if (totalNeeded > totalCurrent) {
         console.log(`➕ Creating ${totalNeeded - totalCurrent} new chapters`)
         for (let i = totalCurrent; i < totalNeeded; i++) {
           const outlineChapter = outline.chapters[i]
           const order = i + 1
-          const content = generateInitialChapterContent(outlineChapter)
-          
           console.log(`Creating new chapter ${order}: "${outlineChapter.title}"`)
-          
+
           updatePromises.push(
             fetch(`/api/books/${book.id}/chapters`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 title: outlineChapter.title,
-                content: content,
+                content: '',
                 order: order
               }),
             }).then(r => r.ok ? console.log(`✅ Created chapter ${order}`) : console.error(`❌ Failed creating ${order}`))
           )
         }
       }
-      
+
       // Step 3: Delete extra chapters if outline has fewer
       if (totalCurrent > totalNeeded) {
         console.log(`🗑️ Deleting ${totalCurrent - totalNeeded} extra chapters`)
         for (let i = totalNeeded; i < totalCurrent; i++) {
           const chapterToDelete = sortedChapters[i]
           console.log(`Deleting extra chapter ${chapterToDelete.id}`)
-          
+
           updatePromises.push(
             fetch(`/api/books/${book.id}/chapters/${chapterToDelete.id}`, {
               method: 'DELETE'
@@ -245,12 +292,25 @@ export function EditableOutline({ outline, book, mutate, onOutlineUpdated }: Edi
           )
         }
       }
-      
-      // Execute all operations
+
+      // Execute create/delete operations
       await Promise.all(updatePromises)
       console.log('✨ SMART sync completed - perfect order with preserved content!')
+
+      // Verify the updates worked by fetching fresh data
+      const verifyResponse = await fetch(`/api/books/${book.id}`)
+      if (verifyResponse.ok) {
+        const verifyBook = await verifyResponse.json()
+        const sortedChapters = verifyBook.chapters.sort((a: any, b: any) => a.order - b.order)
+        console.log('🔍 Verification - Final chapter order:')
+        sortedChapters.forEach((ch: any) => {
+          console.log(`  ${ch.order}: ${ch.title}`)
+        })
+      }
     } catch (error) {
       console.error('💥 Error in smart sync:', error)
+    } finally {
+      setIsSyncing(false)
     }
   }
 
@@ -533,12 +593,9 @@ ${keyPointsList}
       })
 
       if (response.ok) {
-        // Sync all chapters with new outline structure
-        await syncAllChaptersWithOutline()
-        
-        // Revalidate to sync with server data
+        // Backend will sync chapters; just revalidate
         mutate()
-        
+
         // Then generate AI content for the new chapter at its new position
         setTimeout(() => {
           handleGenerateChapter(newChapterPosition)
@@ -596,10 +653,7 @@ ${keyPointsList}
       })
 
       if (response.ok) {
-        // Sync all chapters with new outline structure
-        await syncAllChaptersWithOutline()
-        
-        // Revalidate to sync with server data
+        // Backend will sync chapters; just revalidate
         mutate()
       } else {
         // Revert on error
@@ -697,13 +751,26 @@ ${keyPointsList}
   const handleMoveChapter = async (fromIndex: number, toIndex: number) => {
     if (toIndex < 0 || toIndex >= outline.chapters.length) return
 
+    console.log(`🔄 Moving chapter from position ${fromIndex} to ${toIndex}`)
+    console.log('Before move:', outline.chapters.map((ch: any, i: number) => `${i}: ${ch.title}`))
+
     // Update the outline chapters array directly
     const updatedChapters = [...outline.chapters]
     const [movedChapter] = updatedChapters.splice(fromIndex, 1)
     updatedChapters.splice(toIndex, 0, movedChapter)
 
+    console.log('After move:', updatedChapters.map((ch: any, i: number) => `${i}: ${ch.title}`))
+    console.log('Moved chapter details:', movedChapter)
+
     // Update titles to maintain proper sequence
     const reorderedChapters = updateChapterTitles(updatedChapters)
+    console.log('After title update:', reorderedChapters.map((ch: any, i: number) => `${i}: ${ch.title}`))
+    console.log('Final reordered chapters for API:', reorderedChapters.map((ch: any, index: number) => ({
+      title: ch.title,
+      description: ch.description,
+      keyPoints: ch.keyPoints,
+      order: index + 1
+    })))
 
     // Prepare the updated book data
     const updatedBook = {
@@ -736,11 +803,12 @@ ${keyPointsList}
       })
 
       if (response.ok) {
-        // Sync all chapters with new outline order
-        await syncAllChaptersWithOutline()
-        
-        // Force revalidation to reflect changes
-        await mutate()
+        console.log('📋 Outline saved successfully, backend will sync chapters...')
+        // Wait briefly, then refresh
+        setTimeout(async () => {
+          await mutate()
+          console.log('✅ Chapter reordering complete!')
+        }, 400)
       } else {
         // Revert on error
         mutate()
@@ -787,10 +855,7 @@ ${keyPointsList}
       })
 
       if (response.ok) {
-        // Complete resync - this will delete extra chapters and reorder everything perfectly
-        await syncAllChaptersWithOutline()
-        
-        // Force revalidation to reflect changes
+        // Backend will sync chapters; just revalidate
         await mutate()
       } else {
         // Revert on error
@@ -863,17 +928,49 @@ ${keyPointsList}
 
       {/* Writing Tips Section */}
       <div className="space-y-3">
-        <div className="flex items-center gap-2  p-2 rounded-full">
-          <Lightbulb className="h-4 w-4 text-white" />
-          <h4 className="text-sm font-medium text-white">Writing Tips</h4>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-2">
+          <div className="flex items-center gap-2 p-3 sm:p-2 rounded-full">
+            <Lightbulb className="h-5 w-5 sm:h-4 sm:w-4 text-white" />
+            <h4 className="text-base sm:text-sm font-medium text-white">Writing Tips</h4>
+          </div>
+          {/* Action Buttons - Moved to top */}
+          <div className="flex justify-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleAddTip}
+              className="text-sm sm:text-xs h-10 sm:h-7 px-4 sm:px-3 touch-manipulation"
+            >
+              <Plus className="h-4 w-4 sm:h-3 sm:w-3 mr-2 sm:mr-1" />
+              Add Tip
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleGenerateSingleTip}
+              disabled={isGeneratingTip}
+              className="text-sm sm:text-xs h-10 sm:h-7 px-4 sm:px-3 touch-manipulation"
+            >
+              {isGeneratingTip ? (
+                <TextShimmer className="text-sm sm:text-xs">
+                  AI thinking...
+                </TextShimmer>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4 sm:h-3 sm:w-3 mr-2 sm:mr-1" />
+                  Generate
+                </>
+              )}
+            </Button>
+          </div>
         </div>
 
         {outline.suggestions?.length > 0 ? (
           <div className="space-y-2">
             {outline.suggestions.map((suggestion: string, index: number) => (
-              <div key={index} className="group bg-primary/10 p-2 rounded-md hover:bg-primary/20 transition-colors">
+              <div key={index} className="group bg-primary/10 p-3 sm:p-2 rounded-md hover:bg-primary/20 transition-colors">
                 {editingTipIndex === index ? (
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <Input
                       value={tempTipText}
                       onChange={(e) => setTempTipText(e.target.value)}
@@ -884,37 +981,39 @@ ${keyPointsList}
                           handleTipCancel()
                         }
                       }}
-                      className="flex-1 text-sm h-8"
+                      className="flex-1 text-sm h-10 sm:h-8"
                       autoFocus
                     />
-                    <Button
-                      size="sm"
-                      onClick={() => handleTipSave(index)}
-                      className="h-8 w-8 p-0"
-                    >
-                      <Check className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleTipCancel}
-                      className="h-8 w-8 p-0"
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
+                    <div className="flex gap-2 sm:flex-shrink-0">
+                      <Button
+                        size="sm"
+                        onClick={() => handleTipSave(index)}
+                        className="h-10 w-10 sm:h-8 sm:w-8 p-0 flex-1 sm:flex-none"
+                      >
+                        <Check className="h-4 w-4 sm:h-3 sm:w-3" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleTipCancel}
+                        className="h-10 w-10 sm:h-8 sm:w-8 p-0 flex-1 sm:flex-none"
+                      >
+                        <X className="h-4 w-4 sm:h-3 sm:w-3" />
+                      </Button>
+                    </div>
                   </div>
                 ) : (
                   <div
-                    className="flex items-center gap-2 p-2 rounded-md cursor-pointer transition-colors group"
+                    className="flex items-start sm:items-center gap-3 sm:gap-2 p-2 rounded-md cursor-pointer transition-colors group"
                     onClick={() => handleTipClick(index, suggestion)}
                   >
-                    <div className="h-1 w-1 bg-muted-foreground rounded-full flex-shrink-0"></div>
-                    <p className="text-sm text-white leading-relaxed flex-1">
+                    <div className="h-1.5 w-1.5 sm:h-1 sm:w-1 bg-muted-foreground rounded-full flex-shrink-0 mt-1.5 sm:mt-0"></div>
+                    <p className="text-base sm:text-sm text-white leading-relaxed flex-1">
                       {suggestion}
                     </p>
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
                       <Trash2
-                        className="h-4 w-4 text-muted-foreground cursor-pointer hover:text-destructive transition-colors"
+                        className="h-5 w-5 sm:h-4 sm:w-4 text-muted-foreground cursor-pointer hover:text-destructive transition-colors touch-manipulation"
                         onClick={(e) => {
                           e.stopPropagation()
                           handleDeleteTip(index)
@@ -932,43 +1031,13 @@ ${keyPointsList}
           </div>
         )}
 
-        {/* Action Buttons */}
-        <div className="flex justify-center gap-2 pt-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleAddTip}
-            className="text-xs h-7 px-3"
-          >
-            <Plus className="h-3 w-3 mr-1" />
-            Add Tip
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleGenerateSingleTip}
-            disabled={isGeneratingTip}
-            className="text-xs h-7 px-3"
-          >
-            {isGeneratingTip ? (
-              <TextShimmer className="text-xs">
-                AI thinking...
-              </TextShimmer>
-            ) : (
-              <>
-                <Sparkles className="h-3 w-3 mr-1" />
-                Generate
-              </>
-            )}
-          </Button>
-        </div>
       </div>
 
       {/* Chapters Section */}
       <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <h4 className="text-sm font-medium text-muted-foreground">Chapters</h4>
-          <span className="text-xs text-muted-foreground">({outline.chapters.length})</span>
+        <div className="flex items-center gap-2 px-1">
+          <h4 className="text-base sm:text-sm font-medium text-muted-foreground">Chapters</h4>
+          <span className="text-sm sm:text-xs text-muted-foreground">({outline.chapters.length})</span>
         </div>
 
         <div className="space-y-3">
@@ -1003,7 +1072,7 @@ ${keyPointsList}
 
                 {/* Action Buttons - Above the card */}
                 {editingChapterId !== outlineChapter.id && (
-                  <div className="flex justify-end gap-2 mb-2">
+                  <div className="flex justify-end gap-2 mb-3">
                     {/* AI Generate */}
                     <Button
                       size="sm"
@@ -1013,13 +1082,13 @@ ${keyPointsList}
                         handleGenerateChapter(index)
                       }}
                       disabled={generatingChapterIndex === index}
-                      className="h-8 px-3 hover:bg-primary/20 text-xs"
+                      className="h-10 sm:h-8 px-4 sm:px-3 hover:bg-primary/20 text-sm sm:text-xs touch-manipulation"
                       title={generatingChapterIndex === index ? "Generating with AI..." : "Generate with AI"}
                     >
-                      <Wand2 className="h-3 w-3 mr-1" />
+                      <Wand2 className="h-4 w-4 sm:h-3 sm:w-3 mr-2 sm:mr-1" />
                       {generatingChapterIndex === index ? "Generating..." : "Generate"}
                     </Button>
-                    
+
                     {/* Delete Chapter */}
                     <Button
                       size="sm"
@@ -1028,10 +1097,10 @@ ${keyPointsList}
                         e.stopPropagation()
                         handleDeleteChapter(index)
                       }}
-                      className="h-8 px-3 hover:bg-destructive/20 hover:text-destructive text-xs"
+                      className="h-10 sm:h-8 px-4 sm:px-3 hover:bg-destructive/20 hover:text-destructive text-sm sm:text-xs touch-manipulation"
                       title="Delete chapter"
                     >
-                      <Trash2 className="h-3 w-3 mr-1" />
+                      <Trash2 className="h-4 w-4 sm:h-3 sm:w-3 mr-2 sm:mr-1" />
                       Delete
                     </Button>
                   </div>
@@ -1040,9 +1109,9 @@ ${keyPointsList}
                 {/* Chapter Card */}
                 <div
                   ref={editingChapterId === outlineChapter.id ? editingChapterRef : null}
-                  className={`rounded-lg p-4 transition-all duration-200 relative group ${generatingChapterIndex === index
-                      ? 'bg-muted animate-pulse'
-                      : 'bg-muted'
+                  className={`rounded-lg p-5 sm:p-4 transition-all duration-200 relative group ${generatingChapterIndex === index
+                    ? 'bg-muted animate-pulse'
+                    : 'bg-muted'
                     } ${editingChapterId === outlineChapter.id
                       ? ''
                       : 'hover:border-primary/50 hover:bg-primary/10 cursor-pointer'
@@ -1050,181 +1119,181 @@ ${keyPointsList}
                   onClick={() => editingChapterId !== outlineChapter.id && handleChapterClick(outlineChapter)}
                 >
 
-                    {/* Glowing background effect for loading */}
-                    {generatingChapterIndex === index && (
-                      <div className="absolute -inset-1 bg-gradient-to-br from-purple-500/20 via-transparent to-blue-500/20 rounded-xl opacity-100 -z-10 blur-xl animate-pulse" />
-                    )}
-                    {editingChapterId === outlineChapter.id && chapterForm ? (
-                      // Edit Mode
-                      <div className="space-y-4">
-                        {/* Chapter Header in Edit Mode */}
-                        <div className="flex items-start gap-3">
-                          <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-white text-base font-medium flex-shrink-0 mt-1">
-                            {index + 1}
-                          </div>
-                          <div className="flex-1 space-y-4">
-                            <div className="space-y-2">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium text-muted-foreground text-sm bg-muted/50 px-2 py-1 rounded">
-                                  {generateChapterPrefix(index, outline.chapters.length)}
-                                </span>
-                                <Input
-                                  value={chapterForm.customTitle || extractCustomTitle(chapterForm.title)}
-                                  onChange={(e) => updateChapterField('customTitle', e.target.value)}
-                                  className="flex-1 font-semibold text-lg"
-                                  placeholder="Enter chapter title..."
-                                />
-                              </div>
+                  {/* Glowing background effect for loading */}
+                  {generatingChapterIndex === index && (
+                    <div className="absolute -inset-1 bg-gradient-to-br from-purple-500/20 via-transparent to-blue-500/20 rounded-xl opacity-100 -z-10 blur-xl animate-pulse" />
+                  )}
+                  {editingChapterId === outlineChapter.id && chapterForm ? (
+                    // Edit Mode
+                    <div className="space-y-4">
+                      {/* Chapter Header in Edit Mode */}
+                      <div className="flex items-start gap-4 sm:gap-3">
+                        <div className="flex items-center justify-center w-8 h-8 sm:w-6 sm:h-6 rounded-full bg-primary text-white text-lg sm:text-base font-medium flex-shrink-0 mt-1">
+                          {index + 1}
+                        </div>
+                        <div className="flex-1 space-y-4">
+                          <div className="space-y-3 sm:space-y-2">
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                              <span className="font-medium text-muted-foreground text-base sm:text-sm bg-muted/50 px-3 py-2 sm:px-2 sm:py-1 rounded w-fit">
+                                {generateChapterPrefix(index, outline.chapters.length)}
+                              </span>
+                              <Input
+                                value={chapterForm.customTitle || extractCustomTitle(chapterForm.title)}
+                                onChange={(e) => updateChapterField('customTitle', e.target.value)}
+                                className="flex-1 font-semibold text-lg h-12 sm:h-auto"
+                                placeholder="Enter chapter title..."
+                              />
                             </div>
-                            <Textarea
-                              value={chapterForm.description}
-                              onChange={(e) => updateChapterField('description', e.target.value)}
-                              className="resize-none min-h-[80px]"
-                              placeholder="Describe what this chapter covers..."
-                            />
                           </div>
+                          <Textarea
+                            value={chapterForm.description}
+                            onChange={(e) => updateChapterField('description', e.target.value)}
+                            className="resize-none min-h-[100px] sm:min-h-[80px] text-base sm:text-sm"
+                            placeholder="Describe what this chapter covers..."
+                          />
                         </div>
+                      </div>
 
-                        {/* Key Points in Edit Mode */}
-                        <div className="pl-9 space-y-3">
-                          <h5 className="text-base font-medium text-muted-foreground">Key Points</h5>
-                          <div className="space-y-2">
-                            {chapterForm.keyPoints.map((point: string, pointIndex: number) => (
-                              <div key={pointIndex} className="flex items-center gap-2 group">
-                                <div className="h-1 w-1 bg-primary rounded-full flex-shrink-0"></div>
-                                <Input
-                                  value={point}
-                                  onChange={(e) => updateKeyPoint(pointIndex, e.target.value)}
-                                  className="flex-1 text-base h-8"
-                                  placeholder="Key point..."
-                                />
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    removeKeyPoint(pointIndex)
-                                  }}
-                                  className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0"
-                                >
-                                  <X className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            ))}
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                addKeyPoint()
-                              }}
-                              className="text-xs h-7 px-2 border-dashed border ml-3"
-                            >
-                              <Plus className="h-3 w-3 mr-1" />
-                              Add Key Point
-                            </Button>
-                          </div>
-                        </div>
-
-                        {/* Save/Cancel Buttons */}
-                        <div className="flex justify-end gap-2 pt-3 border-t border-muted">
+                      {/* Key Points in Edit Mode */}
+                      <div className="pl-12 sm:pl-9 space-y-4 sm:space-y-3">
+                        <h5 className="text-lg sm:text-base font-medium text-muted-foreground">Key Points</h5>
+                        <div className="space-y-3 sm:space-y-2">
+                          {chapterForm.keyPoints.map((point: string, pointIndex: number) => (
+                            <div key={pointIndex} className="flex items-start sm:items-center gap-3 sm:gap-2 group">
+                              <div className="h-1.5 w-1.5 sm:h-1 sm:w-1 bg-primary rounded-full flex-shrink-0 mt-4 sm:mt-0"></div>
+                              <Input
+                                value={point}
+                                onChange={(e) => updateKeyPoint(pointIndex, e.target.value)}
+                                className="flex-1 text-base sm:text-sm h-12 sm:h-8"
+                                placeholder="Key point..."
+                              />
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  removeKeyPoint(pointIndex)
+                                }}
+                                className="opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity h-12 w-12 sm:h-8 sm:w-8 p-0 touch-manipulation"
+                              >
+                                <X className="h-4 w-4 sm:h-3 sm:w-3" />
+                              </Button>
+                            </div>
+                          ))}
                           <Button
                             size="sm"
-                            variant="ghost"
+                            variant="outline"
                             onClick={(e) => {
                               e.stopPropagation()
-                              cancelChapterEdit()
+                              addKeyPoint()
                             }}
-                            className="text-xs h-7 px-3"
+                            className="text-sm sm:text-xs h-10 sm:h-7 px-4 sm:px-2 border-dashed border ml-4 sm:ml-3 w-full sm:w-auto touch-manipulation"
                           >
-                            Cancel
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              saveChapterChanges()
-                            }}
-                            className="text-xs h-7 px-3"
-                          >
-                            <Save className="h-3 w-3 mr-1" />
-                            Save
+                            <Plus className="h-4 w-4 sm:h-3 sm:w-3 mr-2 sm:mr-1" />
+                            Add Key Point
                           </Button>
                         </div>
                       </div>
-                    ) : (
-                      // View Mode
-                      <div className="space-y-4">
-                        {/* Chapter Header */}
-                        <div className="flex items-start gap-3">
-                          <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-white text-xs font-medium flex-shrink-0 mt-1">
-                            {index + 1}
-                          </div>
-                          <div className="flex-1">
-                            <h4 className="font-medium text-base mb-1 text-foreground transition-colors">
-                              {generateFullChapterTitle(index, outline.chapters.length, extractCustomTitle(outlineChapter.title))}
-                            </h4>
-                            <p className="text-sm text-muted-foreground leading-relaxed mb-3">
-                              {outlineChapter.description}
-                            </p>
 
-                            {/* Key Points */}
-                            {outlineChapter.keyPoints.length > 0 && (
-                              <div className="space-y-1">
-                                {outlineChapter.keyPoints.map((point: string, pointIndex: number) => (
-                                  <div key={pointIndex} className="flex items-start gap-2">
-                                    <div className="h-1 w-1 bg-muted-foreground rounded-full mt-2 flex-shrink-0"></div>
-                                    <p className="text-sm text-muted-foreground leading-relaxed">{point}</p>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-
+                      {/* Save/Cancel Buttons */}
+                      <div className="flex flex-col sm:flex-row justify-end gap-3 sm:gap-2 pt-4 sm:pt-3 border-t border-muted">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            cancelChapterEdit()
+                          }}
+                          className="text-sm sm:text-xs h-10 sm:h-7 px-4 sm:px-3 order-2 sm:order-1 touch-manipulation"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            saveChapterChanges()
+                          }}
+                          className="text-sm sm:text-xs h-10 sm:h-7 px-4 sm:px-3 order-1 sm:order-2 touch-manipulation"
+                        >
+                          <Save className="h-4 w-4 sm:h-3 sm:w-3 mr-2 sm:mr-1" />
+                          Save
+                        </Button>
                       </div>
-                    )}
+                    </div>
+                  ) : (
+                    // View Mode
+                    <div className="space-y-4">
+                      {/* Chapter Header */}
+                      <div className="flex items-start gap-4 sm:gap-3">
+                        <div className="flex items-center justify-center w-8 h-8 sm:w-6 sm:h-6 rounded-full bg-primary text-white text-base sm:text-xs font-medium flex-shrink-0 mt-1">
+                          {index + 1}
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-medium text-lg sm:text-base mb-2 sm:mb-1 text-foreground transition-colors leading-tight">
+                            {generateFullChapterTitle(index, outline.chapters.length, extractCustomTitle(outlineChapter.title))}
+                          </h4>
+                          <p className="text-base sm:text-sm text-muted-foreground leading-relaxed mb-4 sm:mb-3">
+                            {outlineChapter.description}
+                          </p>
+
+                          {/* Key Points */}
+                          {outlineChapter.keyPoints.length > 0 && (
+                            <div className="space-y-2 sm:space-y-1">
+                              {outlineChapter.keyPoints.map((point: string, pointIndex: number) => (
+                                <div key={pointIndex} className="flex items-start gap-3 sm:gap-2">
+                                  <div className="h-1.5 w-1.5 sm:h-1 sm:w-1 bg-muted-foreground rounded-full mt-2.5 sm:mt-2 flex-shrink-0"></div>
+                                  <p className="text-base sm:text-sm text-muted-foreground leading-relaxed">{point}</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+
+                    </div>
+                  )}
 
                 </div>
 
                 {/* Plus icon with dotted line (shows after chapters except the last one - conclusion) */}
                 {index < outline.chapters.length - 1 && (
-                  <div className="flex items-center justify-center py-4">
+                  <div className="flex items-center justify-center py-6 sm:py-4">
                     <div className="flex-1 border-t border-dashed border-muted-foreground/30"></div>
-                    <div className="flex gap-2 mx-3">
+                    <div className="flex gap-3 sm:gap-2 mx-4 sm:mx-3">
                       {/* Move chapter up */}
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => handleMoveChapter(index + 1, index)}
                         disabled={index === outline.chapters.length - 2}
-                        className="h-8 w-8 p-0 rounded-full border-dashed border-2 opacity-50 hover:opacity-100 hover:bg-muted/10 transition-all"
+                        className="h-10 w-10 sm:h-8 sm:w-8 p-0 rounded-full border-dashed border-2 opacity-70 sm:opacity-50 hover:opacity-100 hover:bg-muted/10 transition-all touch-manipulation"
                         title="Move next chapter up"
                       >
-                        <ChevronUp className="h-4 w-4" />
+                        <ChevronUp className="h-5 w-5 sm:h-4 sm:w-4" />
                       </Button>
-                      
+
                       {/* Add new chapter - in the middle */}
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => handleCreateChapter(index)}
-                        className="h-8 w-8 p-0 rounded-full border-dashed border-2 opacity-50 hover:opacity-100 hover:bg-primary/5 transition-all"
+                        className="h-10 w-10 sm:h-8 sm:w-8 p-0 rounded-full border-dashed border-2 opacity-70 sm:opacity-50 hover:opacity-100 hover:bg-primary/5 transition-all touch-manipulation"
                         title="Add empty chapter after this one"
                       >
-                        <Plus className="h-3 w-3" />
+                        <Plus className="h-4 w-4 sm:h-3 sm:w-3" />
                       </Button>
-                      
+
                       {/* Move chapter down */}
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => handleMoveChapter(index, index + 1)}
-                        className="h-8 w-8 p-0 rounded-full border-dashed border-2 opacity-50 hover:opacity-100 hover:bg-muted/10 transition-all"
+                        className="h-10 w-10 sm:h-8 sm:w-8 p-0 rounded-full border-dashed border-2 opacity-70 sm:opacity-50 hover:opacity-100 hover:bg-muted/10 transition-all touch-manipulation"
                         title="Move current chapter down"
                       >
-                        <ChevronDown className="h-4 w-4" />
+                        <ChevronDown className="h-5 w-5 sm:h-4 sm:w-4" />
                       </Button>
                     </div>
                     <div className="flex-1 border-t border-dashed border-muted-foreground/30"></div>

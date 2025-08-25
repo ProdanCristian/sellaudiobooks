@@ -217,7 +217,7 @@ I focus on creating meaningful chapters that build your story or content progres
     try {
       console.log('Starting to save outline and create chapters for:', book.title)
       console.log('Outline data:', outlineData)
-      
+
       // First save the outline
       const outlineResponse = await fetch(`/api/books/${book.id}/outline`, {
         method: 'POST',
@@ -232,52 +232,81 @@ I focus on creating meaningful chapters that build your story or content progres
         console.error('Failed to save outline:', errorData)
         throw new Error('Failed to save outline')
       }
-      
+
       console.log('Outline saved successfully')
 
-      // Then create chapters from the outline
+      // Then sync chapters with the outline (avoid duplicates)
       if (outlineData.chapters && Array.isArray(outlineData.chapters)) {
-        const chapterPromises = []
-        
-        for (let i = 0; i < outlineData.chapters.length; i++) {
-          const outlineChapter = outlineData.chapters[i]
-          
-          // Generate initial chapter content based on outline
-          const initialContent = generateInitialChapterContent(outlineChapter)
-          
-          // Create chapter with explicit order to avoid conflicts
-          chapterPromises.push(
-            fetch(`/api/books/${book.id}/chapters`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                title: outlineChapter.title,
-                content: initialContent,
-                order: i + 1  // Add explicit order back
-              }),
-            }).then(async (response) => {
-              if (!response.ok) {
-                const errorData = await response.text().catch(() => 'Unknown error')
-                console.error(`Failed to create chapter ${i + 1}:`, outlineChapter.title, errorData)
-                return null
-              } else {
-                const chapterData = await response.json()
-                console.log(`Successfully created chapter ${i + 1}:`, chapterData.title)
-                return chapterData
-              }
-            }).catch((error) => {
-              console.error(`Error creating chapter ${i + 1}:`, outlineChapter.title, error)
-              return null
+        try {
+          // Fetch fresh current chapters
+          const freshBookRes = await fetch(`/api/books/${book.id}`)
+          const freshBook = freshBookRes.ok ? await freshBookRes.json() : { chapters: [] }
+          const currentChapters = (freshBook.chapters || []).slice().sort((a: any, b: any) => a.order - b.order)
+          const desiredChapters = outlineData.chapters
+
+          const currentCount = currentChapters.length
+          const desiredCount = desiredChapters.length
+          const pairs = Math.min(currentCount, desiredCount)
+
+          // 1) Batch reorder/retitle existing chapters by index
+          if (pairs > 0) {
+            const updates = [] as Array<{ id: string, order: number, title: string }>
+            for (let i = 0; i < pairs; i++) {
+              const desired = desiredChapters[i]
+              const actual = currentChapters[i]
+              updates.push({ id: actual.id, order: i + 1, title: desired.title })
+            }
+            const batchRes = await fetch(`/api/books/${book.id}/chapters`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ updates })
             })
-          )
+            if (!batchRes.ok) {
+              console.error('Failed to batch reorder chapters:', await batchRes.text())
+            }
+          }
+
+          // 2) Create missing chapters if outline has more
+          if (desiredCount > currentCount) {
+            const createPromises: Promise<any>[] = []
+            for (let i = currentCount; i < desiredCount; i++) {
+              const outlineChapter = desiredChapters[i]
+              createPromises.push(
+                fetch(`/api/books/${book.id}/chapters`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    title: outlineChapter.title,
+                    content: '',
+                    order: i + 1
+                  })
+                }).then(async (res) => {
+                  if (!res.ok) {
+                    console.error(`Failed to create chapter ${i + 1}:`, await res.text())
+                  } else {
+                    const data = await res.json()
+                    console.log(`Successfully created chapter ${i + 1}:`, data.title)
+                  }
+                }).catch(err => console.error('Create error:', err))
+              )
+            }
+            await Promise.all(createPromises)
+          }
+
+          // 3) Delete extra chapters if outline has fewer
+          if (currentCount > desiredCount) {
+            const deletePromises: Promise<any>[] = []
+            for (let i = desiredCount; i < currentCount; i++) {
+              const ch = currentChapters[i]
+              deletePromises.push(
+                fetch(`/api/books/${book.id}/chapters/${ch.id}`, { method: 'DELETE' })
+              )
+            }
+            await Promise.all(deletePromises)
+          }
+        } catch (err) {
+          console.error('Error syncing chapters with outline:', err)
         }
-        
-        // Wait for all chapters to be created
-        const results = await Promise.all(chapterPromises)
-        const successfulChapters = results.filter(Boolean)
-        console.log(`Created ${successfulChapters.length} out of ${outlineData.chapters.length} chapters`)
       }
 
       // Notify parent that outline and chapters were created
@@ -530,7 +559,7 @@ ${keyPointsList}
                       <div className="mt-4 pt-4 border-t border-border/50">
                         <div className="flex items-center gap-2 text-xs text-emerald-600">
                           <CheckCircle2 className="h-4 w-4" />
-                          <span className="font-medium">Outline and chapters created successfully! You can now start writing.</span>
+                          <span className="font-medium">Outline created successfully!</span>
                         </div>
                       </div>
                     )}

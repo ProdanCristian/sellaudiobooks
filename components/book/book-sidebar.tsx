@@ -102,20 +102,20 @@ export default function BookSidebar({
       setActiveTab('outline')
       return
     }
-    
+
     // Auto-select first chapter when switching to chapters tab
     if (value === 'chapters' && book.chapters.length > 0) {
       const firstChapter = book.chapters.sort((a, b) => a.order - b.order)[0]
       setSelectedChapter(firstChapter)
     }
-    
+
     setActiveTab(value)
   }
 
   // Auto-switch to outline if currently on a disabled tab
   useEffect(() => {
-    if ((activeTab === 'chapters' && shouldDisableChapters) || 
-        (activeTab === 'voice' && shouldDisableVoice)) {
+    if ((activeTab === 'chapters' && shouldDisableChapters) ||
+      (activeTab === 'voice' && shouldDisableVoice)) {
       setActiveTab('outline')
     }
   }, [activeTab, shouldDisableChapters, shouldDisableVoice, setActiveTab])
@@ -124,10 +124,10 @@ export default function BookSidebar({
 
 
   return (
-    <Tabs 
-      value={activeTab} 
+    <Tabs
+      value={activeTab}
       onValueChange={handleTabChange}
-      className="w-full" 
+      className="w-full"
       orientation="vertical"
     >
       <TabsList className="flex flex-col h-fit w-full p-2">
@@ -135,16 +135,16 @@ export default function BookSidebar({
           <List className="h-4 w-4 mr-2" />
           Outline
         </TabsTrigger>
-        <TabsTrigger 
-          value="chapters" 
+        <TabsTrigger
+          value="chapters"
           className={`w-full justify-start ${shouldDisableChapters ? 'opacity-50 cursor-not-allowed' : ''}`}
           disabled={shouldDisableChapters}
         >
           <BookOpen className="h-4 w-4 mr-2" />
           Chapters
         </TabsTrigger>
-        <TabsTrigger 
-          value="voice" 
+        <TabsTrigger
+          value="voice"
           className={`w-full justify-start ${shouldDisableVoice ? 'opacity-50 cursor-not-allowed' : ''}`}
           disabled={shouldDisableVoice}
         >
@@ -158,34 +158,33 @@ export default function BookSidebar({
       </TabsList>
 
       <TabsContent value="chapters" className="space-y-2">
-        <div className="backdrop-blur-sm bg-white/3 border border-white/8 rounded-lg p-3">
+        <div className="backdrop-blur-sm bg-white/1 border border-white/8 rounded-lg p-3">
           <h4 className="text-sm font-medium text-foreground mb-3 px-1">Chapters</h4>
           <div className="max-h-80 overflow-y-auto space-y-3">
             {book.chapters.sort((a, b) => a.order - b.order).map((chapter, index) => (
               <div
                 key={chapter.id}
-                className={`relative p-4 rounded-lg transition-all duration-200 bg-muted/70 hover:bg-muted/85 hover:shadow-sm ${
-                  selectedChapter?.id === chapter.id ? 'bg-muted/95 border-primary shadow-sm' : 'border-muted/40'
-                } group cursor-pointer border`}
+                className={`relative p-4 rounded-lg transition-all duration-200 bg-muted/70 hover:bg-muted/85 hover:shadow-sm ${selectedChapter?.id === chapter.id ? 'bg-muted/95 border-primary shadow-sm' : 'border-muted/40'
+                  } group cursor-pointer border`}
                 onClick={() => setSelectedChapter(chapter)}
               >
-              {/* Chapter Number Badge */}
-              <div className="flex items-start gap-3">
-                <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-medium flex-shrink-0 mt-0.5">
-                  {chapter.order}
-                </div>
-                
-                <div className="flex-1 min-w-0">
-                  {/* Chapter Title */}
-                  <h3 className="font-medium text-sm leading-relaxed mb-2 line-clamp-2">
-                    {chapter.title}
-                  </h3>
-                  
-                  {/* Chapter Stats */}
-                  <p className="text-xs text-muted-foreground">
-                    {chapter.wordCount.toLocaleString()} words
-                  </p>
-                </div>
+                {/* Chapter Number Badge */}
+                <div className="flex items-start gap-3">
+                  <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-medium flex-shrink-0 mt-0.5">
+                    {chapter.order}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    {/* Chapter Title */}
+                    <h3 className="font-medium text-sm leading-relaxed mb-2 line-clamp-2">
+                      {chapter.title}
+                    </h3>
+
+                    {/* Chapter Stats */}
+                    <p className="text-xs text-muted-foreground">
+                      {chapter.wordCount.toLocaleString()} words
+                    </p>
+                  </div>
                 </div>
               </div>
             ))}

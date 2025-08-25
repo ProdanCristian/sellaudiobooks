@@ -169,6 +169,29 @@ export default function ChaptersTab({
       </div>
 
       <div className="space-y-3">
+        {(() => {
+          if (!book.outline) return null
+          const outlineCh = book.outline.chapters.find(ch => ch.order === selectedChapter.order)
+          if (!outlineCh) return null
+          return (
+            <div className="rounded-lg border border-border/70 bg-muted/30 p-4">
+              <h4 className="text-sm font-semibold mb-2">Chapter Overview</h4>
+              {outlineCh.description && (
+                <p className="text-sm text-muted-foreground mb-3">{outlineCh.description}</p>
+              )}
+              {outlineCh.keyPoints && outlineCh.keyPoints.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1">Key points</p>
+                  <ul className="list-disc ml-5 space-y-1">
+                    {outlineCh.keyPoints.map((kp, idx) => (
+                      <li key={idx} className="text-sm text-muted-foreground">{kp}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )
+        })()}
         <RichEditor
           value={editingChapter?.content || ''}
           onChange={(html) => setEditingChapter((prev: Chapter | null) => prev ? { ...prev, content: html } : prev)}
