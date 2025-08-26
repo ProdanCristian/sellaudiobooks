@@ -17,7 +17,7 @@ import {
   ChevronUp,
   ChevronDown
 } from "lucide-react"
-import { motion, AnimatePresence } from 'motion/react'
+import { motion } from 'motion/react'
 
 interface EditableOutlineProps {
   outline: any

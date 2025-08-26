@@ -227,7 +227,7 @@ export async function PATCH(
         orderBy: { order: "asc" },
       });
       const minOrder = minChapter ? minChapter.order : 1;
-      let tempBase = minOrder - 1000000;
+      const tempBase = minOrder - 1000000;
 
       // Move all updated chapters to unique temporary orders to avoid unique collisions
       for (let i = 0; i < updates.length; i++) {

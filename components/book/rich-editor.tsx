@@ -109,8 +109,13 @@ export default function RichEditor({ value, onChange, onSave, isSaving, classNam
     const [menuPosition, setMenuPosition] = useState<{ top: number, left: number }>({ top: 0, left: 0 })
     const [editorState, setEditorState] = useState(0) // Force re-render when buttons are clicked
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+    const hasUnsavedChangesRef = useRef<boolean>(false)
     const wrapperRef = useRef<HTMLDivElement>(null)
     const lastSavedContentRef = useRef<string>(value)
+    const skipNextBlurAutoSaveRef = useRef<boolean>(false)
+    const lastSelectionTextRef = useRef<string>('')
+    const lastSelectionRangeRef = useRef<{ from: number, to: number }>({ from: 0, to: 0 })
+    const suppressAutoSaveRef = useRef<boolean>(false)
 
     // Pulse mark extension to animate selected text
     const PulseMark = useMemo(() => Mark.create({
@@ -158,23 +163,41 @@ export default function RichEditor({ value, onChange, onSave, isSaving, classNam
             const newContent = editor.getHTML()
             onChange(newContent)
 
-            // Track unsaved changes
+            // Track unsaved changes only; do not autosave while typing
             if (autoSave && newContent !== lastSavedContentRef.current) {
                 setHasUnsavedChanges(true)
+                hasUnsavedChangesRef.current = true
             }
         },
         onBlur: ({ editor }) => {
             // Auto-save when editor loses focus if there are unsaved changes
-            if (autoSave && hasUnsavedChanges && onSave && !isSaving) {
+            if (skipNextBlurAutoSaveRef.current) {
+                // Suppress autosave triggered by external content switch (e.g., chapter change)
+                skipNextBlurAutoSaveRef.current = false
+                return
+            }
+            if (autoSave && hasUnsavedChangesRef.current && onSave && !isSaving && !suppressAutoSaveRef.current) {
                 onSave()
                 setHasUnsavedChanges(false)
+                hasUnsavedChangesRef.current = false
                 lastSavedContentRef.current = editor.getHTML()
             }
         },
         onSelectionUpdate: () => {
             // Force re-render when selection changes to update button states
             // Use a small delay to ensure the editor state is fully updated
-            setTimeout(() => setEditorState(prev => prev + 1), 0)
+            setTimeout(() => {
+                // Capture last non-empty selection text for reliability
+                const txt = getSelectedText()
+                if (txt) {
+                    lastSelectionTextRef.current = txt
+                }
+                if (editor) {
+                    const sel = editor.state.selection
+                    lastSelectionRangeRef.current = { from: sel.from, to: sel.to }
+                }
+                setEditorState(prev => prev + 1)
+            }, 0)
         },
         editorProps: {
             handleKeyDown: (view, event) => {
@@ -199,6 +222,18 @@ export default function RichEditor({ value, onChange, onSave, isSaving, classNam
         const { from, to } = editor.state.selection
         const text = editor.state.doc.textBetween(from, to, '\n')
         return text.trim()
+    }, [editor])
+
+    const clearAllPulseMarks = useCallback((restoreSelection?: { from: number, to: number }) => {
+        if (!editor) return
+        const selectionToRestore = restoreSelection || editor.state.selection
+        editor
+            .chain()
+            .focus()
+            .setTextSelection({ from: 0, to: editor.state.doc.content.size })
+            .unsetMark('pulse')
+            .setTextSelection({ from: selectionToRestore.from, to: selectionToRestore.to })
+            .run()
     }, [editor])
 
     // Get current button states - this will re-calculate on every render when editorState changes
@@ -262,12 +297,20 @@ export default function RichEditor({ value, onChange, onSave, isSaving, classNam
 
     const applyTransform = async (action: TransformAction) => {
         if (!editor || isTransforming) return
-        const selected = getSelectedText()
+        // Try multiple strategies to obtain the current selection text
+        let selected = getSelectedText()
+        if (!selected) {
+            const winSel = typeof window !== 'undefined' ? (window.getSelection?.()?.toString() || '') : ''
+            selected = winSel.trim() || lastSelectionTextRef.current
+        }
         if (!selected) return
 
         setIsTransforming(true)
         try {
+            // Pause autosave briefly to avoid state churn and caret movement
+            suppressAutoSaveRef.current = true
             // Apply pulsing mark to the current selection so the text itself pulses
+            const originalSelection = editor.state.selection
             editor.chain().focus().setMark('pulse').run()
 
             const response = await fetch('/api/chat/writing-assistant/transform', {
@@ -291,13 +334,23 @@ export default function RichEditor({ value, onChange, onSave, isSaving, classNam
 
             // Replace the selection with transformed HTML (this also removes the pulse mark since the content changes)
             editor.chain().focus().deleteSelection().insertContent(html).run()
+            // Capture the caret after insertion and clear pulse marks without moving the caret
+            const afterInsertionSelection = editor.state.selection
+            clearAllPulseMarks({ from: afterInsertionSelection.from, to: afterInsertionSelection.to })
+            // Force toolbar to refresh
+            setEditorState(prev => prev + 1)
         } catch (error) {
             console.error('Transform failed:', error)
             alert('Could not apply the transformation. Please try again.')
         } finally {
             setIsTransforming(false)
-            // Remove the pulse mark in case content wasn't replaced
-            editor?.chain().focus().unsetMark('pulse').run()
+            // Ensure pulse mark is fully cleared even on errors or early returns, restoring current caret
+            if (editor) {
+                const currentSel = editor.state.selection
+                clearAllPulseMarks({ from: currentSel.from, to: currentSel.to })
+            }
+            // Re-enable autosave after a short grace period so UI stabilizes
+            setTimeout(() => { suppressAutoSaveRef.current = false }, 600)
         }
     }
 
@@ -307,10 +360,21 @@ export default function RichEditor({ value, onChange, onSave, isSaving, classNam
         const current = editor.getHTML()
         const desired = looksLikeMarkdown(value) ? markdownToHtmlBasic(value) : (value || '')
         if (desired !== current) {
+            // Suppress the next blur autosave triggered by programmatic content swap
+            skipNextBlurAutoSaveRef.current = true
             editor.commands.setContent(desired)
             // Update saved content reference when external value changes
             lastSavedContentRef.current = desired
             setHasUnsavedChanges(false)
+            hasUnsavedChangesRef.current = false
+            // Try to restore the last known caret position if valid
+            try {
+                const docSize = editor.state.doc.content.size
+                const { from, to } = lastSelectionRangeRef.current
+                const safeFrom = Math.min(Math.max(0, from), docSize)
+                const safeTo = Math.min(Math.max(0, to), docSize)
+                editor.chain().focus().setTextSelection({ from: safeFrom, to: safeTo }).run()
+            } catch { }
         }
     }, [value, editor])
 
@@ -322,7 +386,33 @@ export default function RichEditor({ value, onChange, onSave, isSaving, classNam
         }
     }, [isSaving, editor, autoSave])
 
+    // No timers to cleanup
+
     // (removed unused triggerAutoSave)
+
+    // Autosave on page unload/refresh or tab close
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (autoSave && hasUnsavedChangesRef.current && onSave && !isSaving) {
+                try { onSave() } catch { }
+                e.preventDefault()
+                e.returnValue = ''
+            }
+        }
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'hidden') {
+                if (autoSave && hasUnsavedChangesRef.current && onSave && !isSaving) {
+                    try { onSave() } catch { }
+                }
+            }
+        }
+        window.addEventListener('beforeunload', handleBeforeUnload)
+        document.addEventListener('visibilitychange', handleVisibilityChange)
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload)
+            document.removeEventListener('visibilitychange', handleVisibilityChange)
+        }
+    }, [autoSave, onSave, isSaving])
 
     const handleWrapperMouseDown = (e: MouseEvent<HTMLDivElement>) => {
         if (!editor) return
@@ -386,17 +476,18 @@ export default function RichEditor({ value, onChange, onSave, isSaving, classNam
                     <div
                         className="absolute z-20 backdrop-blur-sm border border-border bg-popover text-popover-foreground rounded-md shadow-md p-2 flex flex-col gap-2"
                         style={{ top: menuPosition.top + 12, left: menuPosition.left, transform: 'translate(-50%, 0)' }}
-                        onMouseDown={(e) => e.preventDefault()}
+                        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                        onClick={(e) => { e.stopPropagation() }}
                     >
                         {/* Primary transform buttons */}
                         <div className="flex items-center gap-1">
-                            <Button type="button" size="sm" variant="ghost" disabled={isTransforming} onClick={() => applyTransform('expand')}>
+                            <Button type="button" size="sm" variant="ghost" onMouseDown={(e) => e.preventDefault()} disabled={isTransforming} onClick={() => applyTransform('expand')}>
                                 Expand
                             </Button>
-                            <Button type="button" size="sm" variant="ghost" disabled={isTransforming} onClick={() => applyTransform('shorten')}>
+                            <Button type="button" size="sm" variant="ghost" onMouseDown={(e) => e.preventDefault()} disabled={isTransforming} onClick={() => applyTransform('shorten')}>
                                 Shorten
                             </Button>
-                            <Button type="button" size="sm" variant="ghost" disabled={isTransforming} onClick={() => applyTransform('fix_grammar')}>
+                            <Button type="button" size="sm" variant="ghost" onMouseDown={(e) => e.preventDefault()} disabled={isTransforming} onClick={() => applyTransform('fix_grammar')}>
                                 Fix grammar
                             </Button>
                         </div>
@@ -404,33 +495,33 @@ export default function RichEditor({ value, onChange, onSave, isSaving, classNam
                         {/* Secondary transform buttons */}
                         <div className="flex flex-col gap-1 border-t pt-2">
                             <div className="flex items-center gap-1">
-                                <Button type="button" size="sm" variant="secondary" disabled={isTransforming} onClick={() => applyTransform('simplify')}>
+                                <Button type="button" size="sm" variant="secondary" onMouseDown={(e) => e.preventDefault()} disabled={isTransforming} onClick={() => applyTransform('simplify')}>
                                     Simplify
                                 </Button>
-                                <Button type="button" size="sm" variant="secondary" disabled={isTransforming} onClick={() => applyTransform('formal')}>
+                                <Button type="button" size="sm" variant="secondary" onMouseDown={(e) => e.preventDefault()} disabled={isTransforming} onClick={() => applyTransform('formal')}>
                                     Formal
                                 </Button>
-                                <Button type="button" size="sm" variant="secondary" disabled={isTransforming} onClick={() => applyTransform('casual')}>
+                                <Button type="button" size="sm" variant="secondary" onMouseDown={(e) => e.preventDefault()} disabled={isTransforming} onClick={() => applyTransform('casual')}>
                                     Casual
                                 </Button>
-                                <Button type="button" size="sm" variant="secondary" disabled={isTransforming} onClick={() => applyTransform('creative')}>
+                                <Button type="button" size="sm" variant="secondary" onMouseDown={(e) => e.preventDefault()} disabled={isTransforming} onClick={() => applyTransform('creative')}>
                                     Creative
                                 </Button>
                             </div>
                             <div className="flex items-center gap-1">
-                                <Button type="button" size="sm" variant="secondary" disabled={isTransforming} onClick={() => applyTransform('persuasive')}>
+                                <Button type="button" size="sm" variant="secondary" onMouseDown={(e) => e.preventDefault()} disabled={isTransforming} onClick={() => applyTransform('persuasive')}>
                                     Persuasive
                                 </Button>
-                                <Button type="button" size="sm" variant="secondary" disabled={isTransforming} onClick={() => applyTransform('concise')}>
+                                <Button type="button" size="sm" variant="secondary" onMouseDown={(e) => e.preventDefault()} disabled={isTransforming} onClick={() => applyTransform('concise')}>
                                     Concise
                                 </Button>
-                                <Button type="button" size="sm" variant="secondary" disabled={isTransforming} onClick={() => applyTransform('dramatic')}>
+                                <Button type="button" size="sm" variant="secondary" onMouseDown={(e) => e.preventDefault()} disabled={isTransforming} onClick={() => applyTransform('dramatic')}>
                                     Dramatic
                                 </Button>
-                                <Button type="button" size="sm" variant="secondary" disabled={isTransforming} onClick={() => applyTransform('technical')}>
+                                <Button type="button" size="sm" variant="secondary" onMouseDown={(e) => e.preventDefault()} disabled={isTransforming} onClick={() => applyTransform('technical')}>
                                     Technical
                                 </Button>
-                                <Button type="button" size="sm" variant="secondary" disabled={isTransforming} onClick={() => applyTransform('friendly')}>
+                                <Button type="button" size="sm" variant="secondary" onMouseDown={(e) => e.preventDefault()} disabled={isTransforming} onClick={() => applyTransform('friendly')}>
                                     Friendly
                                 </Button>
                             </div>

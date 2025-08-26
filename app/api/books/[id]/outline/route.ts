@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { shouldUpdateBookStatus } from "@/lib/book-status";
 
 interface ChapterData {
   title: string;
@@ -202,6 +203,28 @@ export async function POST(
           } catch (syncError) {
             console.error("Chapter sync after outline save failed:", syncError);
           }
+        }
+
+        // After potential chapter sync, update the book status based on chapter count
+        try {
+          if (!skipChapterSync) {
+            const chaptersCount = await tx.chapter.count({ where: { bookId } });
+            const maybeNewStatus = shouldUpdateBookStatus(
+              { chaptersCount },
+              book.status
+            );
+            if (maybeNewStatus) {
+              await tx.book.update({
+                where: { id: bookId },
+                data: { status: maybeNewStatus },
+              });
+            }
+          }
+        } catch (statusError) {
+          console.error(
+            "Failed to update book status after outline sync:",
+            statusError
+          );
         }
 
         return { outline: updatedOutline };

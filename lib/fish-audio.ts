@@ -1,4 +1,4 @@
-import { encode } from "@msgpack/msgpack";
+// import { encode } from "@msgpack/msgpack";
 
 export interface FishAudioVoice {
   _id: string;
@@ -126,16 +126,20 @@ export class FishAudioClient {
       prosody?: Record<string, unknown> | null;
     }
   ): Promise<ArrayBuffer> {
+    const DEBUG =
+      process.env.FISHAUDIO_DEBUG === "1" ||
+      process.env.FISHAUDIO_DEBUG === "true";
+    const MODEL = process.env.FISHAUDIO_MODEL || "s1";
     const {
       format = "mp3",
       sample_rate = 44100,
       mp3_bitrate = 192,
       opus_bitrate = 32,
-      temperature = 0.6,
-      top_p = 0.7,
+      temperature = 0.9,
+      top_p = 0.9,
       chunk_length = 200,
       normalize = true,
-      latency = "normal",
+      latency = "balanced",
       prosody = null,
     } = options || {};
 
@@ -155,31 +159,72 @@ export class FishAudioClient {
 
     if (prosody) requestBody.prosody = prosody;
 
-    const response = await fetch(`${this.baseUrl}/v1/tts`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        "Content-Type": "application/json",
-        model: "s1",
-      },
-      body: JSON.stringify(requestBody),
-    });
+    const maxAttempts = 5;
+    let lastError: Error | null = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (DEBUG) {
+        console.log("[FishAudio] TTS request", {
+          attempt,
+          format,
+          sample_rate,
+          mp3_bitrate,
+          opus_bitrate,
+          temperature,
+          top_p,
+          chunk_length,
+          normalize,
+          latency,
+          hasProsody: !!prosody,
+          textLength: text.length,
+          reference_id: voiceId ? "present" : "null",
+          modelHeader: MODEL,
+        });
+      }
+      const response = await fetch(`${this.baseUrl}/v1/tts`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          "Content-Type": "application/json",
+          model: MODEL,
+        },
+        body: JSON.stringify(requestBody),
+      });
 
-    if (!response.ok) {
+      if (response.ok) {
+        if (DEBUG) {
+          console.log("[FishAudio] TTS success", { attempt });
+        }
+        const audioBuffer = await response.arrayBuffer();
+        return audioBuffer;
+      }
+
+      const status = response.status;
       const errorText = await response.text().catch(() => "Unknown error");
-      console.error("Fish Audio API Error:", {
-        status: response.status,
+      const transient = status >= 500 || status === 429 || status === 408; // server errors, rate limit, timeout
+      console.error("[FishAudio] API error", {
+        status,
         statusText: response.statusText,
         body: errorText,
         headers: Object.fromEntries(response.headers.entries()),
+        attempt,
+        transient,
       });
-      throw new Error(
-        `Speech generation failed: ${response.status} ${response.statusText} - ${errorText}`
-      );
+
+      if (!transient || attempt === maxAttempts) {
+        lastError = new Error(
+          `Speech generation failed: ${status} ${response.statusText} - ${errorText}`
+        );
+        break;
+      }
+
+      // Exponential backoff with jitter: base 1s * 2^(attempt-1) +/- 20%
+      const base = 1000 * Math.pow(2, attempt - 1);
+      const jitter = base * (0.2 * (Math.random() - 0.5) * 2);
+      const delay = Math.max(500, Math.min(15000, base + jitter));
+      if (DEBUG) console.log("[FishAudio] retrying after ms", delay);
+      await new Promise((r) => setTimeout(r, delay));
     }
 
-    // The API returns binary audio data, not JSON
-    const audioBuffer = await response.arrayBuffer();
-    return audioBuffer;
+    throw lastError || new Error("Unknown Fish Audio error");
   }
 }

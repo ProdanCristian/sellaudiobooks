@@ -5,6 +5,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+const AUDIO_DEBUG =
+  process.env.AUDIO_DEBUG === "1" || process.env.AUDIO_DEBUG === "true";
+
 // Background job processing function
 async function processAudioJob(
   audioJobId: string,
@@ -13,6 +16,12 @@ async function processAudioJob(
   voiceId: string
 ) {
   try {
+    if (AUDIO_DEBUG)
+      console.log("[AudioJob] start processing", {
+        audioJobId,
+        voiceId,
+        textLength: text.length,
+      });
     // Update job status to processing
     await prisma.audioJob.update({
       where: { id: audioJobId },
@@ -63,6 +72,9 @@ async function processAudioJob(
       "audio/mpeg"
     );
 
+    if (AUDIO_DEBUG)
+      console.log("[AudioJob] upload complete", { audioJobId, audioUrl });
+
     // Update job with success
     await prisma.audioJob.update({
       where: { id: audioJobId },
@@ -80,6 +92,7 @@ async function processAudioJob(
         audioUrl,
       },
     });
+    if (AUDIO_DEBUG) console.log("[AudioJob] success", { audioJobId });
   } catch (error) {
     console.error("Background job processing failed:", error);
 
@@ -107,11 +120,13 @@ async function processAudioJob(
         },
       });
     }
+    if (AUDIO_DEBUG) console.log("[AudioJob] failed", { audioJobId });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
+    if (AUDIO_DEBUG) console.log("[AudioAPI] POST /api/generation/audio start");
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
@@ -128,6 +143,19 @@ export async function POST(request: NextRequest) {
       chapterId,
       contentType,
     } = await request.json();
+
+    if (AUDIO_DEBUG) {
+      console.log("[AudioAPI] request payload", {
+        bookId,
+        chapterId,
+        contentType,
+        chapterTitle:
+          typeof chapterTitle === "string" ? chapterTitle.slice(0, 80) : null,
+        bookTitle:
+          typeof bookTitle === "string" ? bookTitle.slice(0, 80) : null,
+        textLength: typeof text === "string" ? text.length : 0,
+      });
+    }
 
     if (!voiceId || !text || !bookId || !contentType) {
       return NextResponse.json(
@@ -185,6 +213,15 @@ export async function POST(request: NextRequest) {
           chapterId: chapterId || null,
         },
       });
+      if (AUDIO_DEBUG)
+        console.log("[AudioJob] created", {
+          jobId,
+          bookId,
+          chapterId,
+          contentType,
+          textLength: text.length,
+          chapterTitle: chapterTitle?.slice?.(0, 80) || null,
+        });
 
       // Check for existing AudioGeneration and delete old audio from R2 immediately
       const existing = await prisma.audioGeneration.findFirst({
@@ -238,6 +275,12 @@ export async function POST(request: NextRequest) {
           },
         });
       }
+      if (AUDIO_DEBUG)
+        console.log("[AudioGen] upserted", {
+          id: audioGeneration.id,
+          status: audioGeneration.status,
+          contentType: audioGeneration.contentType,
+        });
 
       // Start background job processing
       // Note: In a real production app, this would be handled by a job queue

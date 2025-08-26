@@ -277,7 +277,6 @@ export default function BookEditPage() {
               setActiveTab={setActiveTab}
               selectedChapter={selectedChapter}
               setSelectedChapter={setSelectedChapter}
-              setChapterChats={setChapterChats}
               mutate={mutate}
             />
           </div>
@@ -315,6 +314,7 @@ export default function BookEditPage() {
                 selectedVoice={selectedVoice}
                 setSelectedVoice={setSelectedVoice}
                 mutate={mutate}
+                onGoToOutline={() => setActiveTab('outline')}
               />
             )}
 
