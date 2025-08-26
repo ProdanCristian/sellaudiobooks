@@ -123,6 +123,14 @@ export default function WritingChat({
     }
   }
 
+  // Only allow manual expansion - no auto behavior
+  useEffect(() => {
+    // Set initial collapsed state and don't change it automatically
+    if (typeof collapsedProp !== 'boolean') {
+      setIsCollapsed(true)
+    }
+  }, [])
+
   const scrollToBottom = () => {
     if (scrollAreaRef.current) {
       scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight
@@ -136,25 +144,8 @@ export default function WritingChat({
   // Auto-expand when generating/streaming
   const isStreaming = Boolean(streamingMessageId)
   const isActive = isLoading || isStreaming
-  useEffect(() => {
-    if (isActive) {
-      updateCollapsed(false)
-    }
-  }, [isActive])
+  // Removed auto-expand on isActive - chat should only expand manually
 
-  // Auto-collapse when there's existing content in the editor (only on initial load, not after chat interactions)
-  useEffect(() => {
-    if (hasExistingContent && !isActive && messages.length <= 1) {
-      updateCollapsed(true)
-    }
-  }, [hasExistingContent, isActive])
-
-  // Auto-collapse when switching to a chapter with existing content (only on initial load, not after chat interactions)
-  useEffect(() => {
-    if (hasExistingContent && !isActive && messages.length <= 1) {
-      updateCollapsed(true)
-    }
-  }, [mode, headerContext, hasExistingContent, isActive])
 
 
   // Expose reserved bottom space via CSS variable so the page can add padding-bottom (measured for accuracy)

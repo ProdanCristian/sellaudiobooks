@@ -12,6 +12,8 @@ interface ChapterData {
 interface OutlineRequest {
   chapters: ChapterData[];
   suggestions?: string[];
+  // When true, do not touch actual book chapters; only update outline model
+  skipChapterSync?: boolean;
 }
 
 export async function POST(
@@ -27,7 +29,11 @@ export async function POST(
     }
 
     const bookId = params.id;
-    const { chapters, suggestions = [] }: OutlineRequest = await request.json();
+    const {
+      chapters,
+      suggestions = [],
+      skipChapterSync = false,
+    }: OutlineRequest = await request.json();
 
     if (!chapters || !Array.isArray(chapters) || chapters.length === 0) {
       return NextResponse.json(
@@ -60,32 +66,47 @@ export async function POST(
         let updatedOutline;
 
         if (existingOutline) {
-          // Update existing outline - just update suggestions and recreate chapters
-          // Delete existing outline chapters first
+          // Update existing outline - first delete all existing chapters, then recreate
           await tx.outlineChapter.deleteMany({
             where: { outlineId: existingOutline.id },
           });
 
-          // Update outline suggestions
+          // Update outline suggestions only
           updatedOutline = await tx.outline.update({
             where: { id: existingOutline.id },
             data: {
               suggestions,
-              chapters: {
-                create: chapters.map((chapterData, index) => ({
-                  title: chapterData.title,
-                  description: chapterData.description,
-                  keyPoints: chapterData.keyPoints,
-                  order: index + 1,
-                })),
-              },
             },
+          });
+
+          // Create new outline chapters separately to avoid constraint conflicts
+          for (let i = 0; i < chapters.length; i++) {
+            await tx.outlineChapter.create({
+              data: {
+                title: chapters[i].title,
+                description: chapters[i].description,
+                keyPoints: chapters[i].keyPoints,
+                order: i + 1,
+                outlineId: existingOutline.id,
+              },
+            });
+          }
+
+          // Re-fetch the updated outline with chapters
+          const refetchedOutline = await tx.outline.findUnique({
+            where: { id: existingOutline.id },
             include: {
               chapters: {
                 orderBy: { order: "asc" },
               },
             },
           });
+
+          if (!refetchedOutline) {
+            throw new Error("Failed to refetch updated outline");
+          }
+
+          updatedOutline = refetchedOutline;
         } else {
           // Create new outline if none exists
           updatedOutline = await tx.outline.create({
@@ -109,68 +130,78 @@ export async function POST(
           });
         }
 
-        // Canonical server-side sync: make Chapter order/titles exactly match Outline (no content changes)
-        try {
-          const outlineChapters = await tx.outlineChapter.findMany({
-            where: { outlineId: updatedOutline.id },
-            orderBy: { order: "asc" },
-          });
-
-          const existingChapters = await tx.chapter.findMany({
-            where: { bookId },
-            orderBy: { order: "asc" },
-          });
-
-          const minOrder =
-            existingChapters.length > 0 ? existingChapters[0].order : 1;
-          const tempBase = minOrder - 1000000;
-
-          // 1) Move all existing chapters to unique temporary orders
-          for (let i = 0; i < existingChapters.length; i++) {
-            await tx.chapter.update({
-              where: { id: existingChapters[i].id },
-              data: { order: tempBase - i },
+        // Optionally sync actual chapters. Skipped for outline-only operations like reordering.
+        if (!skipChapterSync) {
+          try {
+            const outlineChapters = await tx.outlineChapter.findMany({
+              where: { outlineId: updatedOutline.id },
+              orderBy: { order: "asc" },
             });
-          }
 
-          // 2) Reuse as many chapters as possible in order, update title and final order
-          const reuseCount = Math.min(
-            outlineChapters.length,
-            existingChapters.length
-          );
-          for (let i = 0; i < reuseCount; i++) {
-            await tx.chapter.update({
-              where: { id: existingChapters[i].id },
-              data: {
-                order: i + 1,
-                title: outlineChapters[i].title,
-              },
+            const existingChapters = await tx.chapter.findMany({
+              where: { bookId },
+              orderBy: { order: "asc" },
             });
-          }
 
-          // 3) Create missing chapters if outline has more
-          for (let i = reuseCount; i < outlineChapters.length; i++) {
-            await tx.chapter.create({
-              data: {
-                title: outlineChapters[i].title,
-                content: "",
-                order: i + 1,
-                wordCount: 0,
-                bookId: bookId,
-              },
+            // Create a map of existing chapters by title for content preservation
+            const chaptersByTitle = new Map();
+            existingChapters.forEach((chapter) => {
+              chaptersByTitle.set(chapter.title.toLowerCase().trim(), chapter);
             });
-          }
 
-          // 4) Delete extra chapters if existing had more
-          for (
-            let i = outlineChapters.length;
-            i < existingChapters.length;
-            i++
-          ) {
-            await tx.chapter.delete({ where: { id: existingChapters[i].id } });
+            const minOrder =
+              existingChapters.length > 0 ? existingChapters[0].order : 1;
+            const tempBase = minOrder - 1000000;
+
+            // 1) Move all existing chapters to unique temporary orders
+            for (let i = 0; i < existingChapters.length; i++) {
+              await tx.chapter.update({
+                where: { id: existingChapters[i].id },
+                data: { order: tempBase - i },
+              });
+            }
+
+            // 2) Process outline chapters and match with existing ones by title
+            const usedChapterIds = new Set();
+            for (let i = 0; i < outlineChapters.length; i++) {
+              const outlineChapter = outlineChapters[i];
+              const matchingChapter = chaptersByTitle.get(
+                outlineChapter.title.toLowerCase().trim()
+              );
+
+              if (matchingChapter && !usedChapterIds.has(matchingChapter.id)) {
+                // Update existing chapter with new position and title (preserve content)
+                await tx.chapter.update({
+                  where: { id: matchingChapter.id },
+                  data: {
+                    order: i + 1,
+                    title: outlineChapter.title, // Update title in case of minor changes
+                  },
+                });
+                usedChapterIds.add(matchingChapter.id);
+              } else {
+                // Create new chapter if no matching title found
+                await tx.chapter.create({
+                  data: {
+                    title: outlineChapter.title,
+                    content: "",
+                    order: i + 1,
+                    wordCount: 0,
+                    bookId: bookId,
+                  },
+                });
+              }
+            }
+
+            // 3) Delete chapters that are no longer in the outline
+            for (const chapter of existingChapters) {
+              if (!usedChapterIds.has(chapter.id)) {
+                await tx.chapter.delete({ where: { id: chapter.id } });
+              }
+            }
+          } catch (syncError) {
+            console.error("Chapter sync after outline save failed:", syncError);
           }
-        } catch (syncError) {
-          console.error("Chapter sync after outline save failed:", syncError);
         }
 
         return { outline: updatedOutline };
@@ -264,7 +295,7 @@ export async function PATCH(
 
 // DELETE method for deleting outline
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   const params = await context.params;
@@ -313,7 +344,11 @@ export async function DELETE(
   }
 }
 
-function generateInitialContent(chapterData: ChapterData): string {
+function generateInitialContent(chapterData: {
+  title: string;
+  description: string;
+  keyPoints: string[];
+}): string {
   // Generate initial HTML structure with outline content only
   const keyPointsList = chapterData.keyPoints
     .map((point) => `<li>${point}</li>`)

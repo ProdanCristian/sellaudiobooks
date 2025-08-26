@@ -158,7 +158,7 @@ export default function BookSidebar({
       </TabsList>
 
       <TabsContent value="chapters" className="space-y-2">
-        <div className="backdrop-blur-sm bg-white/1 border border-white/8 rounded-lg p-3">
+        <div className="backdrop-blur-sm bg-white/1 border rounded-lg p-3">
           <h4 className="text-sm font-medium text-foreground mb-3 px-1">Chapters</h4>
           <div className="max-h-80 overflow-y-auto space-y-3">
             {book.chapters.sort((a, b) => a.order - b.order).map((chapter, index) => (

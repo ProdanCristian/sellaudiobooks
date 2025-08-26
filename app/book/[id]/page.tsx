@@ -160,7 +160,7 @@ export default function BookEditPage() {
       }],
       loading: false,
       streamingMessageId: null,
-      collapsed: false
+      collapsed: true
     }
   }
 
@@ -178,7 +178,7 @@ export default function BookEditPage() {
           }],
           loading: false,
           streamingMessageId: null,
-          collapsed: false
+          collapsed: true
         }
       }))
     }
@@ -191,6 +191,24 @@ export default function BookEditPage() {
       initializeChapterChat(selectedChapter.id)
     }
   }, [selectedChapter, initializeChapterChat])
+
+  // Ensure chat stays collapsed when navigating to a chapter with no content
+  useEffect(() => {
+    if (!selectedChapter) return
+    const isEmptyContent = (!selectedChapter.content || selectedChapter.content.trim() === '') && (selectedChapter.wordCount === 0)
+    if (isEmptyContent) {
+      setChapterChats(prev => {
+        const current = prev[selectedChapter.id] || getChapterChat(selectedChapter.id)
+        return {
+          ...prev,
+          [selectedChapter.id]: {
+            ...current,
+            collapsed: true
+          }
+        }
+      })
+    }
+  }, [selectedChapter, setChapterChats])
 
   useEffect(() => {
     if (status === 'unauthenticated') {
