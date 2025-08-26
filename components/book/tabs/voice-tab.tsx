@@ -82,6 +82,7 @@ export default function VoiceTab({
 }: VoiceTabProps) {
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false)
   const [generatingFor, setGeneratingFor] = useState<string | null>(null)
+  const [batchProgress, setBatchProgress] = useState<{ done: number, total: number } | null>(null)
 
 
   // On mount and whenever server data changes, derive local generating state
@@ -162,20 +163,75 @@ export default function VoiceTab({
     }
 
     // Add chapters with content
-    const chaptersWithContent = book?.chapters.filter(chapter => {
+    const orderedChapters = (book?.chapters || []).slice().sort((a, b) => a.order - b.order)
+    const chaptersWithContent = orderedChapters.filter(chapter => {
       const textContent = htmlToText(chapter.content)
       const wordCount = textContent.split(/\s+/).filter(w => w.length > 0).length
       return wordCount > 0 && chapter.wordCount > 0
     }) || []
 
+    // Ask per-chapter whether to regenerate if audio already exists
+    const chapterAudioById = new Map<string, AudioGeneration>()
+      ; (book?.audioGenerations || []).forEach(ag => {
+        if (ag.contentType === 'CHAPTER' && ag.status === 'COMPLETED' && ag.audioUrl) {
+          if (ag.chapterId) chapterAudioById.set(ag.chapterId, ag)
+        }
+      })
+
+    // Helper to POST a chapter audio generation job (raw, without UI state churn)
+    const postChapterJob = async (chapter: Chapter) => {
+      const chapterTextContent = htmlToText(chapter.content)
+      const textWithTitle = `${chapter.title}.\n\n${chapterTextContent}`
+      const response = await fetch('/api/generation/audio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          voiceId: selectedVoice!._id,
+          voiceName: selectedVoice!.title,
+          text: textWithTitle,
+          chapterTitle: chapter.title,
+          bookTitle: book?.title,
+          bookId: book?.id,
+          chapterId: chapter.id,
+          contentType: 'CHAPTER'
+        })
+      })
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({ error: 'Unknown error' }))
+        throw new Error(data.error || 'Failed to generate chapter audio')
+      }
+    }
+
+    // Batch generate (sequential) and track progress
+    setIsGeneratingAudio(true)
+    setGeneratingFor('full-audiobook')
+    setBatchProgress({ done: 0, total: chaptersWithContent.length })
+
+    for (let i = 0; i < chaptersWithContent.length; i++) {
+      const ch = chaptersWithContent[i]
+      const existing = chapterAudioById.get(ch.id)
+      let shouldRegenerate = true
+      if (existing) {
+        shouldRegenerate = window.confirm(`Audio already exists for "${ch.title}". Regenerate this chapter? Click Cancel to reuse the existing audio.`)
+      }
+      try {
+        if (!existing || shouldRegenerate) {
+          await postChapterJob(ch)
+        }
+      } catch (e) {
+        console.error('Chapter generation failed:', ch.title, e)
+      } finally {
+        setBatchProgress(prev => prev ? { done: prev.done + 1, total: prev.total } : null)
+        // Soft revalidate to reflect any new jobs
+        mutate()
+      }
+    }
+
+    // Build combined text for fallback full-book generation (acts as server-side merge alternative)
     chaptersWithContent.forEach((chapter, index) => {
       const chapterTextContent = htmlToText(chapter.content)
       fullContent += `${chapter.title}.\n\n${chapterTextContent}`
-
-      // Add spacing between chapters (but not after the last one)
-      if (index < chaptersWithContent.length - 1) {
-        fullContent += '\n\n'
-      }
+      if (index < chaptersWithContent.length - 1) fullContent += '\n\n'
     })
 
     try {
@@ -199,6 +255,18 @@ export default function VoiceTab({
       const data = await response.json()
 
       if (response.ok) {
+        // After posting full-book generation, also request a merge of per-chapter audios
+        // This produces a merged audiobook from completed chapter MP3s
+        try {
+          await fetch('/api/generation/audio/merge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bookId: book?.id })
+          })
+        } catch (e) {
+          console.warn('Merge request failed (will rely on single-shot full-book generation):', e)
+        }
+
         // Trigger a revalidation to get the updated audio generation
         mutate()
         // Don't reset state immediately - let the job status determine the UI state
@@ -211,7 +279,9 @@ export default function VoiceTab({
       // Only reset state on actual API/network error (not job processing errors)
       setIsGeneratingAudio(false)
       setGeneratingFor(null)
+      setBatchProgress(null)
     }
+    // Keep isGeneratingAudio true; UI will reset when server reports complete for full book
   }
 
   const handleGenerateAudio = async (content: string, type: 'chapter', chapterTitle?: string, chapterId?: string) => {
@@ -373,16 +443,16 @@ export default function VoiceTab({
                   className="bg-primary hover:bg-primary/90"
                 >
                   {isGeneratingAudio && generatingFor === 'full-audiobook' ? (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <Volume2 className="h-4 w-4 mr-2" />
-                        Generate Full Book
-                      </>
-                    )}
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      {batchProgress ? `Processing ${batchProgress.done}/${batchProgress.total} chapters...` : 'Processing...'}
+                    </>
+                  ) : (
+                    <>
+                      <Volume2 className="h-4 w-4 mr-2" />
+                      Generate Full Book
+                    </>
+                  )}
                 </Button>
               </div>
               {/* Audio Player for Full Audiobook */}
@@ -449,16 +519,16 @@ export default function VoiceTab({
                 disabled={!selectedVoice || (isGeneratingAudio && generatingFor === chapter.title)}
               >
                 {isGeneratingAudio && generatingFor === chapter.title ? (
-                    <>
-                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <Volume2 className="h-4 w-4 mr-2" />
-                      Generate Audio
-                    </>
-                  )}
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <Volume2 className="h-4 w-4 mr-2" />
+                    Generate Audio
+                  </>
+                )}
               </Button>
             </div>
             {/* Audio Player for Chapter */}
