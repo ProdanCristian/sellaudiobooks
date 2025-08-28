@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { FishAudioClient } from "@/lib/fish-audio";
+import { getVoiceProvider } from "@/lib/voice-providers";
 import { uploadImageToR2, deleteFileFromR2ByUrl } from "@/lib/r2";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -11,9 +11,10 @@ const AUDIO_DEBUG =
 // Background job processing function
 async function processAudioJob(
   audioJobId: string,
-  client: FishAudioClient,
+  client: { generateSpeech: (voiceId: string | null, text: string, options?: { format?: string; sample_rate?: number | null; language?: string }) => Promise<ArrayBuffer> },
   text: string,
-  voiceId: string
+  voiceId: string,
+  language?: string | null,
 ) {
   try {
     if (AUDIO_DEBUG)
@@ -29,7 +30,7 @@ async function processAudioJob(
     });
 
     // Generate the speech
-    const audioBuffer = await client.generateSpeech(voiceId, text);
+    const audioBuffer = await client.generateSpeech(voiceId, text, { format: 'mp3', sample_rate: 44100, language: language || undefined });
 
     // Get job details for file naming
     const audioJob = await prisma.audioJob.findUnique({
@@ -61,7 +62,7 @@ async function processAudioJob(
       .slice(0, 30);
 
     const timestamp = Date.now();
-    // FishAudioClient currently returns MP3 by default per lib/fish-audio.ts
+    // Provider currently returns MP3 by default
     const fileName = `audio/${sanitizedTitle}-${sanitizedChapter}-${timestamp}.mp3`;
 
     // Upload to R2
@@ -142,6 +143,7 @@ export async function POST(request: NextRequest) {
       bookId,
       chapterId,
       contentType,
+      language,
     } = await request.json();
 
     if (AUDIO_DEBUG) {
@@ -178,18 +180,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Book not found" }, { status: 404 });
     }
 
-    const apiKey = process.env.FISHAUDIO_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        {
-          error: "Fish Audio API key not configured",
-        },
-        { status: 500 }
-      );
+    // Initialize provider client
+    let client;
+    try {
+      client = getVoiceProvider();
+    } catch (e) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : 'Voice provider not configured' }, { status: 500 });
     }
-
-    // Initialize Fish Audio client
-    const client = new FishAudioClient(apiKey);
 
     // Use provided voice name or fall back to 'Unknown Voice'
     const finalVoiceName = voiceName || "Unknown Voice";
@@ -285,7 +282,7 @@ export async function POST(request: NextRequest) {
       // Start background job processing
       // Note: In a real production app, this would be handled by a job queue
       // For now, we'll use a simple async function with timeout
-      processAudioJob(audioJob.id, client, text, voiceId).catch((error) => {
+      processAudioJob(audioJob.id, client, text, voiceId, language).catch((error) => {
         console.error("Background job processing error:", error);
       });
 
@@ -301,6 +298,7 @@ export async function POST(request: NextRequest) {
           chapterTitle,
           bookTitle,
           startedAt: new Date().toISOString(),
+          language: language || null,
         },
       });
     } catch (error) {

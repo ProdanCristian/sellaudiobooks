@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from 'react'
 import useSWR from 'swr'
 import { useParams } from 'next/navigation'
 import Header from '@/components/layout/header'
-import { FishAudioVoice } from '@/lib/fish-audio'
+import { Voice } from '@/types/voice'
 import OutlineTab from '@/components/book/tabs/outline-tab'
 import ChaptersTab from '@/components/book/tabs/chapters-tab'
 import VoiceTab from '@/components/book/tabs/voice-tab'
@@ -140,7 +140,7 @@ export default function BookEditPage() {
   }>>({});
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
-  const [selectedVoice, setSelectedVoice] = useState<FishAudioVoice | null>(null)
+  const [selectedVoice, setSelectedVoice] = useState<Voice | null>(null)
 
   // Keep an editable copy of the selected chapter for rich editor
   useEffect(() => {

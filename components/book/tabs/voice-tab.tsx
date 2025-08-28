@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Volume2, RefreshCw, BookOpen, X } from 'lucide-react'
 import VoiceSelectionModal from '@/components/voice/voice-selection-modal'
 import AudioPlayer from '@/components/voice/audio-player'
-import { FishAudioVoice } from '@/lib/fish-audio'
+import { Voice } from '@/types/voice'
 // import { useRouter } from 'next/navigation'
 
 interface Chapter {
@@ -68,8 +68,8 @@ interface Book {
 
 interface VoiceTabProps {
   book: Book
-  selectedVoice: FishAudioVoice | null
-  setSelectedVoice: (voice: FishAudioVoice | null) => void
+  selectedVoice: Voice | null
+  setSelectedVoice: (voice: Voice | null) => void
   mutate: KeyedMutator<Book>
 }
 
@@ -88,6 +88,7 @@ export default function VoiceTab({
   const [isMerging, setIsMerging] = useState(false)
   const [fullMarkers, setFullMarkers] = useState<{ label: string, time: number }[] | null>(null)
   const [showVoiceModal, setShowVoiceModal] = useState(false)
+  const [isVoiceModalLoading, setIsVoiceModalLoading] = useState(false)
 
   const htmlToText = (html: string): string => {
     return (html || '')
@@ -243,14 +244,15 @@ export default function VoiceTab({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          voiceId: selectedVoice!._id,
+          voiceId: selectedVoice!.id,
           voiceName: selectedVoice!.title,
           text: textWithTitle,
           chapterTitle: chapter.title,
           bookTitle: book?.title,
           bookId: book?.id,
           chapterId: chapter.id,
-          contentType: 'CHAPTER'
+          contentType: 'CHAPTER',
+          language: (selectedVoice?.languages && selectedVoice.languages[0]) || 'en-us'
         })
       })
       if (!res.ok) {
@@ -336,14 +338,15 @@ export default function VoiceTab({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          voiceId: selectedVoice!._id,
+          voiceId: selectedVoice!.id,
           voiceName: selectedVoice!.title,
           text: textWithTitle,
           chapterTitle: chapterTitle || 'Chapter',
           bookTitle: book?.title,
           bookId: book?.id,
           chapterId: chapterId || null,
-          contentType: 'CHAPTER'
+          contentType: 'CHAPTER',
+          language: (selectedVoice?.languages && selectedVoice.languages[0]) || 'en-us'
         })
       })
 
@@ -439,7 +442,11 @@ export default function VoiceTab({
               <span className="font-medium">{selectedVoice.title}</span>
             </div>
             <Button variant="outline" size="sm" onClick={() => setShowVoiceModal(true)}>
-              Change
+              {isVoiceModalLoading ? (
+                <span className="flex items-center"><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Loading</span>
+              ) : (
+                'Change'
+              )}
             </Button>
           </div>
         ) : (
@@ -636,6 +643,7 @@ export default function VoiceTab({
         onClose={() => setShowVoiceModal(false)}
         selectedVoice={selectedVoice}
         onSelectVoice={setSelectedVoice}
+        onLoadingChange={setIsVoiceModalLoading}
       />
     </div>
   )

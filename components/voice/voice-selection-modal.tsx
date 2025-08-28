@@ -1,75 +1,94 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import VoiceCard from '@/components/voice/voice-card'
-import { FishAudioVoice } from '@/lib/fish-audio'
-import { Search, Filter, X, Mic } from 'lucide-react'
+import { Voice } from '@/types/voice'
+import { Search, X, Mic } from 'lucide-react'
 
 interface VoiceSelectionModalProps {
   isOpen: boolean
   onClose: () => void
-  selectedVoice: FishAudioVoice | null
-  onSelectVoice: (voice: FishAudioVoice) => void
+  selectedVoice: Voice | null
+  onSelectVoice: (voice: Voice) => void
+  onLoadingChange?: (loading: boolean) => void
 }
 
 export default function VoiceSelectionModal({
   isOpen,
   onClose,
   selectedVoice,
-  onSelectVoice
+  onSelectVoice,
+  onLoadingChange
 }: VoiceSelectionModalProps) {
-  const [voices, setVoices] = useState<FishAudioVoice[]>([])
+  const [voices, setVoices] = useState<Voice[]>([])
+  const [allVoices, setAllVoices] = useState<Voice[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
-  const [selectedLanguage, setSelectedLanguage] = useState<string>('')
+  // English-only; no language filter
+  const contentRef = useRef<HTMLDivElement>(null)
+  const [fixedHeight, setFixedHeight] = useState<number | null>(null)
+  const [selectingId, setSelectingId] = useState<string | null>(null)
 
+  // Initial load only: fetch once when modal opens
   useEffect(() => {
-    if (isOpen && voices.length === 0) {
+    if (isOpen && allVoices.length === 0) {
       fetchVoices()
     }
-  }, [isOpen, voices.length])
+  }, [isOpen, allVoices.length])
 
+  // Apply filters client-side to avoid flicker
   useEffect(() => {
-    if (isOpen) {
-      fetchVoices()
+    let list = allVoices
+    const q = searchTerm.trim().toLowerCase()
+    if (q) {
+      list = list.filter(v => v.title.toLowerCase().includes(q) || v.id.toLowerCase().includes(q))
     }
-  }, [searchTerm, selectedLanguage, isOpen])
+    setVoices(list)
+  }, [searchTerm, allVoices])
 
   const fetchVoices = async () => {
+    // Capture current content height to prevent layout shift during loading
+    if (contentRef.current) {
+      const h = contentRef.current.clientHeight
+      if (h > 0) setFixedHeight(h)
+    }
     setIsLoading(true)
+    onLoadingChange?.(true)
     try {
-      const params = new URLSearchParams({
-        page_size: '50',
-        page_number: '1',
-      })
-
-      if (searchTerm.trim()) {
-        params.append('title', searchTerm.trim())
-      }
-
-      if (selectedLanguage) {
-        params.append('language', selectedLanguage)
-      }
-
-      const response = await fetch(`/api/media/voices?${params.toString()}`)
+      const response = await fetch(`/api/media/voices?page_size=1000&page_number=1`)
       
       if (response.ok) {
         const data = await response.json()
-        setVoices(data.data.items || [])
+        try { console.log('[Voices API] data', data) } catch {}
+        const items: Voice[] = data.data.items || []
+        setAllVoices(items)
+        // Apply initial search filter if any
+        let initial = items
+        const q = searchTerm.trim().toLowerCase()
+        if (q) initial = initial.filter(v => v.title.toLowerCase().includes(q) || v.id.toLowerCase().includes(q))
+        setVoices(initial)
       }
     } catch (error) {
       console.error('Failed to fetch voices:', error)
     } finally {
       setIsLoading(false)
+      onLoadingChange?.(false)
+      // Keep the fixed height until the next paint to avoid flicker,
+      // then release so the content can resize naturally after load
+      requestAnimationFrame(() => setFixedHeight(null))
     }
   }
 
-  const handleSelectVoice = (voice: FishAudioVoice) => {
-    onSelectVoice(voice)
-    onClose()
+  const handleSelectVoice = async (voice: Voice) => {
+    try {
+      setSelectingId(voice.id)
+      onSelectVoice(voice)
+    } finally {
+      setSelectingId(null)
+      onClose()
+    }
   }
 
   const handleBackdropClick = (e: React.MouseEvent) => {
@@ -85,7 +104,7 @@ export default function VoiceSelectionModal({
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       onClick={handleBackdropClick}
     >
-      <div className="flex flex-col max-w-4xl max-h-[80vh] w-full transition-all duration-300 backdrop-blur-md border border-border rounded-lg shadow-lg pointer-events-auto">
+      <div className="flex flex-col max-w-4xl w-full h-[80vh] transition-all duration-300 backdrop-blur-md border border-border rounded-lg shadow-lg pointer-events-auto">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-2 border-b border-border/70 bg-muted/30 rounded-t-lg">
           <div>
@@ -116,32 +135,33 @@ export default function VoiceSelectionModal({
                 className="pl-10"
               />
             </div>
-            <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
-              <SelectTrigger className="w-full sm:w-40">
-                <Filter className="h-4 w-4 mr-2" />
-                <SelectValue placeholder="All Languages" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="en">English</SelectItem>
-                <SelectItem value="es">Spanish</SelectItem>
-                <SelectItem value="fr">French</SelectItem>
-                <SelectItem value="de">German</SelectItem>
-                <SelectItem value="it">Italian</SelectItem>
-              </SelectContent>
-            </Select>
+            {/* Language filter removed (English-only) */}
           </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div ref={contentRef} className="flex-1 overflow-y-auto p-6" style={fixedHeight ? { height: fixedHeight } : undefined}>
           {isLoading ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {[...Array(6)].map((_, i) => (
-                <div key={i} className="bg-muted/30 rounded-lg p-4 animate-pulse">
-                  <div className="space-y-3">
+                <div key={i} className="rounded-lg border border-border/50 p-4 animate-pulse h-56 flex flex-col">
+                  <div className="mb-3">
                     <div className="h-5 bg-muted rounded w-3/4 mx-auto"></div>
-                    <div className="h-8 bg-muted rounded"></div>
-                    <div className="h-8 bg-muted rounded"></div>
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-full bg-muted/40" />
+                      <div className="flex-1 min-w-0">
+                        <div className="w-full bg-muted/30 rounded-full h-1.5" />
+                        <div className="flex justify-between mt-1">
+                          <div className="h-3 w-10 bg-muted/30 rounded" />
+                          <div className="h-3 w-10 bg-muted/30 rounded" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <div className="h-8 bg-muted/30 rounded"></div>
                   </div>
                 </div>
               ))}
@@ -152,17 +172,17 @@ export default function VoiceSelectionModal({
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold">No voices found</h3>
                 <p className="text-muted-foreground max-w-md mx-auto">
-                  {searchTerm || selectedLanguage 
-                    ? "Try adjusting your search terms or filters."
-                    : "You don't have any personal AI voices yet. Create your own voices using Fish Audio to use them for audiobook generation."
+                  {searchTerm
+                    ? "Try adjusting your search terms."
+                    : "You don't have any voices yet."
                   }
                 </p>
-                {!searchTerm && !selectedLanguage && (
+                {!searchTerm && (
                   <Button
-                    onClick={() => window.open('https://fish.audio', '_blank')}
+                    onClick={() => window.open('#', '_blank')}
                     variant="outline"
                   >
-                    Create Voice on Fish Audio
+                    Learn about voices
                   </Button>
                 )}
               </div>
@@ -171,10 +191,10 @@ export default function VoiceSelectionModal({
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {voices.map((voice) => (
                 <VoiceCard
-                  key={voice._id}
+                  key={voice.id}
                   voice={voice}
                   onSelect={handleSelectVoice}
-                  isSelected={selectedVoice?._id === voice._id}
+                  isSelected={selectedVoice?.id === voice.id}
                   showSelectButton={true}
                 />
               ))}
